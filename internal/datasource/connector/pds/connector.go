@@ -655,11 +655,19 @@ func (c *Connector) syncDeltaDrive(
 			}
 		}
 
+		// Always advance the persisted cursor to the position THIS page
+		// reported — including the final page. Skipping this on the last
+		// page (hasMore == false) would re-persist the INPUT cursor, so
+		// the next sync re-fetches the same delta items and re-ingests
+		// unchanged files forever (observed: an uploaded file re-parsed
+		// on every cron tick).
+		if nextCursor != "" {
+			listCursor = nextCursor
+			cursor.ListDeltaCursor = nextCursor
+		}
 		if !hasMore || nextCursor == "" {
 			break
 		}
-		listCursor = nextCursor
-		cursor.ListDeltaCursor = nextCursor
 		// Checkpoint at every page boundary so a timed-out sync resumes
 		// from the last page rather than from the start.
 		if s.checkpoint != nil {

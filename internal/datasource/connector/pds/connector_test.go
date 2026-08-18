@@ -549,6 +549,60 @@ func TestFetchIncremental_DeletionViaOp(t *testing.T) {
 	}
 }
 
+// TestFetchIncremental_CursorAdvancesOnSinglePage: when the delta fits in
+// ONE page (hasMore=false) the persisted cursor must still advance to the
+// position the page reported. The regression re-persisted the INPUT
+// cursor, so every later sync re-fetched the same items and re-ingested
+// the same file on every cron tick (observed in production: an uploaded
+// CSV re-parsed every 30 minutes).
+func TestFetchIncremental_CursorAdvancesOnSinglePage(t *testing.T) {
+	f := newFakePDS(t)
+	f.setDelta("cursor-X", []pdsDeltaItem{
+		{File: pdsFile{FileID: "b", Name: "b.txt", Type: "file", UpdatedAt: time.Now()}, Op: "update"},
+	}, false) // single page: hasMore=false; fake responds with cursor "cursor-X_next"
+	f.setDownload("b", []byte("hello B"), "text/plain")
+
+	c := NewConnector()
+	prev := &types.SyncCursor{
+		ConnectorCursor: map[string]interface{}{
+			"list_delta_cursor": "cursor-X",
+			"drive_files":       map[string]string{"a": time.Now().Format(time.RFC3339)},
+		},
+	}
+	items, cursor, err := c.FetchIncremental(context.Background(), f.config("d1"), prev)
+	if err != nil {
+		t.Fatalf("FetchIncremental: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item on first sync, got %d", len(items))
+	}
+	var pc pdsCursor
+	b, _ := json.Marshal(cursor.ConnectorCursor)
+	_ = json.Unmarshal(b, &pc)
+	if pc.ListDeltaCursor != "cursor-X_next" {
+		t.Fatalf("cursor must advance past the single page: got %q, want %q",
+			pc.ListDeltaCursor, "cursor-X_next")
+	}
+
+	// Second sync with the advanced cursor: the fake has no delta for
+	// "cursor-X_next", so NOTHING may be emitted — the file must not be
+	// re-ingested on the next tick.
+	items2, cursor2, err := c.FetchIncremental(context.Background(), f.config("d1"), cursor)
+	if err != nil {
+		t.Fatalf("second FetchIncremental: %v", err)
+	}
+	if len(items2) != 0 {
+		t.Errorf("second sync re-emitted items (files would be re-parsed every tick): %s",
+			describeItems(items2))
+	}
+	var pc2 pdsCursor
+	b2, _ := json.Marshal(cursor2.ConnectorCursor)
+	_ = json.Unmarshal(b2, &pc2)
+	if pc2.ListDeltaCursor != "cursor-X_next" {
+		t.Errorf("cursor regressed: got %q, want %q", pc2.ListDeltaCursor, "cursor-X_next")
+	}
+}
+
 // TestFetchIncremental_FolderPathResolvedViaGetFile: a file created inside
 // a folder must keep its folder path on the incremental path. Delta pages
 // carry no folder context, so the connector walks up the parent chain via

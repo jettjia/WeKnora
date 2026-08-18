@@ -46,7 +46,7 @@ const (
 // rest by types.DataSourceConfig's AES-256-GCM wire format.
 type Config struct {
 	// Endpoint is the PDS OpenAPI host without scheme. Examples:
-	//   - Enterprise:  bj22856.api.aliyunfile.com
+	//   - Enterprise:  <instance-id>.api.aliyunfile.com
 	//   - Personal:    <instance>.api.aliyunpds.com
 	// Defaults to "pds.aliyuncs.com" (the public cloud default).
 	Endpoint string `json:"endpoint,omitempty"`
