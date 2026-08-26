@@ -139,7 +139,9 @@
     </t-loading>
 
     <SandboxConfigEditorDrawer v-model:visible="showEditor" :record="editingRecord"
-      :preset-type="activeType === 'all' ? '' : activeType" :initial-step="editorStep" @saved="load" />
+      :preset-type="activeType === 'all' ? '' : activeType" :initial-step="editorStep"
+      :has-in-flight-skill="editorHasInFlightSkill"
+      @saved="load" @skills-changed="onSkillsChanged" />
 
     <!--
       Occupancy is a list of sessions and agents, not a one-line status, and it
@@ -264,10 +266,10 @@ const backendLabel = (value: string) => t(`settings.sandbox.backends.${value}`)
 
 const isLegacyRecord = (record: SandboxConfigRecord) => !isNamedSandboxBackend(record.sandbox_type)
 
-// Skills are baked into the remote snapshot image. Docker and local configs
-// have no skills step, so their cards stay a connection summary.
+// Skills are baked into the snapshot image. Local configs have no skills
+// step, so their cards stay a connection summary.
 function supportsSkills(record: SandboxConfigRecord) {
-  return record.sandbox_type === 'cube' || record.sandbox_type === 'e2b'
+  return record.sandbox_type === 'cube' || record.sandbox_type === 'e2b' || record.sandbox_type === 'docker'
 }
 
 function skillsOf(record: SandboxConfigRecord): ConfigSkill[] | undefined {
@@ -292,6 +294,16 @@ function skillTagTheme(skill: ConfigSkill): 'default' | 'warning' | 'primary' {
   return 'default'
 }
 
+function skillInFlight(skill: ConfigSkill): boolean {
+  return skill.status === 'installing' || skill.status === 'removing'
+}
+
+const editorHasInFlightSkill = computed(() => {
+  const id = editingRecord.value?.id
+  if (!id) return false
+  return (skillsByConfig.value[id] || []).some(skillInFlight)
+})
+
 const filteredRecords = computed(() => {
   const base = activeType.value === 'all'
     ? records.value
@@ -314,6 +326,8 @@ const cardMenu = (record: SandboxConfigRecord): CardMenuOption[] => {
   ]
   if (record.sandbox_type === 'cube' || record.sandbox_type === 'e2b') {
     options.push({ content: t('settings.sandbox.viewSandboxes'), value: 'inventory' })
+  }
+  if (supportsSkills(record)) {
     options.push({ content: t('settings.sandbox.manageSkills'), value: 'skills' })
   }
   options.push({ content: t('common.delete'), value: 'delete', theme: 'error' })
@@ -377,7 +391,7 @@ function openSkills(record: SandboxConfigRecord) {
   showEditor.value = true
 }
 
-// Cube/e2b cards now lead with installed skills, so a click lands on that
+// Cube/E2B/Docker cards lead with installed skills, so a click lands on that
 // step. Connection and runtime stay behind the card menu's edit action.
 function openCard(record: SandboxConfigRecord) {
   if (supportsSkills(record)) {
@@ -478,6 +492,13 @@ async function load() {
     MessagePlugin.error(e?.message || t('settings.sandbox.loadFailed'))
   } finally {
     loading.value = false
+  }
+  await loadSkills(records.value)
+}
+
+async function onSkillsChanged(record?: SandboxConfigRecord) {
+  if (record?.id) {
+    records.value = records.value.map((item) => (item.id === record.id ? { ...item, ...record } : item))
   }
   await loadSkills(records.value)
 }
