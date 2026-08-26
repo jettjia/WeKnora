@@ -384,6 +384,87 @@ func TestFetchAll_DriveIDFromResourceIDs(t *testing.T) {
 	}
 }
 
+// TestFetchAll_ScopedToDeepFolder: picking a folder deep in the tree
+// narrows the sync to that subtree. Files keep their ABSOLUTE drive path
+// so they land in the same KB folders as under a whole-drive sync, and
+// out-of-scope files are never fetched.
+func TestFetchAll_ScopedToDeepFolder(t *testing.T) {
+	f := newFakePDS(t)
+	// Tree: /a/b/deep/in.pdf (in scope), /a/out.pdf and /root.pdf (out).
+	f.setFiles("root",
+		pdsFile{FileID: "a", Name: "a", Type: "folder", ParentID: "root"},
+		pdsFile{FileID: "r1", Name: "root.pdf", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+	)
+	f.setFiles("a",
+		pdsFile{FileID: "b", Name: "b", Type: "folder", ParentID: "a"},
+		pdsFile{FileID: "out1", Name: "out.pdf", Type: "file", ParentID: "a", UpdatedAt: time.Now()},
+	)
+	f.setFiles("b",
+		pdsFile{FileID: "deep", Name: "deep", Type: "folder", ParentID: "b"},
+	)
+	f.setFiles("deep",
+		pdsFile{FileID: "in1", Name: "in.pdf", Type: "file", ParentID: "deep", UpdatedAt: time.Now()},
+	)
+	f.setDownload("in1", []byte("in body"), "application/pdf")
+	f.setDownload("out1", []byte("out body"), "application/pdf")
+	f.setDownload("r1", []byte("root body"), "application/pdf")
+	f.setLastCursor("cur1")
+
+	cfg := f.config("d1")
+	cfg.ResourceIDs = []string{"d1:deep"}
+
+	c := NewConnector()
+	items, err := c.FetchAll(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("FetchAll: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected exactly the in-scope file, got %d items: %s",
+			len(items), describeItems(items))
+	}
+	item := items[0]
+	if item.ExternalID != pdsFileExternalID("d1", "in1") {
+		t.Errorf("ExternalID = %q, want in1's", item.ExternalID)
+	}
+	if item.FileName != "/a/b/deep/in.pdf" {
+		t.Errorf("FileName = %q, want absolute drive path \"/a/b/deep/in.pdf\"", item.FileName)
+	}
+	// Out-of-scope files must never be downloaded.
+	if n := f.callCount("file/get_download_url"); n != 1 {
+		t.Errorf("expected exactly 1 download URL call, got %d", n)
+	}
+}
+
+// TestFetchAll_ScopedToFile: picking a single file syncs only that file.
+func TestFetchAll_ScopedToFile(t *testing.T) {
+	f := newFakePDS(t)
+	f.setFiles("root",
+		pdsFile{FileID: "a", Name: "a", Type: "folder", ParentID: "root"},
+	)
+	f.setFiles("a",
+		pdsFile{FileID: "solo", Name: "solo.md", Type: "file", ParentID: "a", UpdatedAt: time.Now()},
+		pdsFile{FileID: "other", Name: "other.md", Type: "file", ParentID: "a", UpdatedAt: time.Now()},
+	)
+	f.setDownload("solo", []byte("solo body"), "text/markdown")
+	f.setDownload("other", []byte("other body"), "text/markdown")
+	f.setLastCursor("cur1")
+
+	cfg := f.config("d1")
+	cfg.ResourceIDs = []string{"d1:solo"}
+
+	c := NewConnector()
+	items, err := c.FetchAll(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("FetchAll: %v", err)
+	}
+	if len(items) != 1 || items[0].ExternalID != pdsFileExternalID("d1", "solo") {
+		t.Fatalf("expected only the picked file, got %s", describeItems(items))
+	}
+	if items[0].FileName != "/a/solo.md" {
+		t.Errorf("FileName = %q, want \"/a/solo.md\"", items[0].FileName)
+	}
+}
+
 // TestFetchAll_FileTypeFilter: the file_types whitelist filters by
 // extension.
 func TestFetchAll_FileTypeFilter(t *testing.T) {
@@ -715,6 +796,132 @@ func TestFetchIncremental_CursorNotFound404_Recovers(t *testing.T) {
 	}
 	if f.callCount("file/get_last_cursor") != 1 {
 		t.Errorf("expected 1 re-handshake, got %d", f.callCount("file/get_last_cursor"))
+	}
+}
+
+// TestFetchIncremental_ScopeChangeRebootstraps: switching the selection
+// from the whole drive to a folder forces a re-bootstrap of that subtree,
+// and files that fell out of scope are tombstoned.
+func TestFetchIncremental_ScopeChangeRebootstraps(t *testing.T) {
+	f := newFakePDS(t)
+	f.setFiles("root",
+		pdsFile{FileID: "sub", Name: "sub", Type: "folder", ParentID: "root"},
+		pdsFile{FileID: "old1", Name: "old.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+	)
+	f.setFiles("sub",
+		pdsFile{FileID: "new1", Name: "new.txt", Type: "file", ParentID: "sub", UpdatedAt: time.Now()},
+	)
+	f.setDownload("new1", []byte("new body"), "text/plain")
+	f.setDownload("old1", []byte("old body"), "text/plain")
+	f.setLastCursor("fresh-cur")
+
+	c := NewConnector()
+	prev := &types.SyncCursor{
+		ConnectorCursor: map[string]interface{}{
+			// Whole-drive baseline (no scope_roots) from an earlier run.
+			"list_delta_cursor": "old-cur",
+			"drive_files":       map[string]string{"old1": time.Now().Format(time.RFC3339)},
+		},
+	}
+	cfg := f.config("d1")
+	cfg.ResourceIDs = []string{"d1:sub"}
+
+	items, newCursor, err := c.FetchIncremental(context.Background(), cfg, prev)
+	if err != nil {
+		t.Fatalf("FetchIncremental: %v", err)
+	}
+	if _, ok := findItem(items, pdsFileExternalID("d1", "new1")); !ok {
+		t.Errorf("expected in-scope file new1 in %s", describeItems(items))
+	}
+	tomb, ok := findItem(items, pdsFileExternalID("d1", "old1"))
+	if !ok || !tomb.IsDeleted {
+		t.Errorf("expected tombstone for out-of-scope old1 in %s", describeItems(items))
+	}
+	// The new cursor records the scope so later delta syncs stay scoped.
+	roots, _ := newCursor.ConnectorCursor["scope_roots"].([]interface{})
+	if len(roots) != 1 || roots[0] != "sub" {
+		t.Errorf("scope_roots = %v, want [sub]", newCursor.ConnectorCursor["scope_roots"])
+	}
+	// A re-bootstrap never consumes the delta feed.
+	if f.callCount("file/list_delta") != 0 {
+		t.Errorf("expected no list_delta calls, got %d", f.callCount("file/list_delta"))
+	}
+}
+
+// TestFetchIncremental_DeltaRespectsScope: during a scoped incremental
+// sync the drive-wide delta feed is filtered to the picked subtree —
+// out-of-scope creates are ignored, a previously synced file that moves
+// out of scope is tombstoned, and deletions of in-scope files tombstone.
+func TestFetchIncremental_DeltaRespectsScope(t *testing.T) {
+	f := newFakePDS(t)
+	f.setFiles("root",
+		pdsFile{FileID: "sub", Name: "sub", Type: "folder", ParentID: "root"},
+	)
+	f.setDelta("c0", []pdsDeltaItem{
+		// In-scope create (parent is the scope root).
+		{File: pdsFile{FileID: "newf", Name: "new.txt", Type: "file", ParentID: "sub", UpdatedAt: time.Now()}, Op: "create"},
+		// Out-of-scope create (drive root).
+		{File: pdsFile{FileID: "outf", Name: "out.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()}, Op: "create"},
+		// Previously synced file moved OUT of scope.
+		{File: pdsFile{FileID: "moved", Name: "moved.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()}, Op: "move"},
+		// Deletion of a previously synced in-scope file.
+		{FileID: "gone", Op: "delete"},
+	}, false)
+	f.setDownload("newf", []byte("new body"), "text/plain")
+	f.setDownload("outf", []byte("out body"), "text/plain")
+	f.setDownload("moved", []byte("moved body"), "text/plain")
+
+	c := NewConnector()
+	prev := &types.SyncCursor{
+		ConnectorCursor: map[string]interface{}{
+			"list_delta_cursor": "c0",
+			"drive_files": map[string]string{
+				"sub":   time.Now().Format(time.RFC3339),
+				"moved": time.Now().Format(time.RFC3339),
+				"gone":  time.Now().Format(time.RFC3339),
+			},
+			"scope_roots": []string{"sub"},
+		},
+	}
+	cfg := f.config("d1")
+	cfg.ResourceIDs = []string{"d1:sub"}
+
+	items, newCursor, err := c.FetchIncremental(context.Background(), cfg, prev)
+	if err != nil {
+		t.Fatalf("FetchIncremental: %v", err)
+	}
+	created, ok := findItem(items, pdsFileExternalID("d1", "newf"))
+	if !ok || created.IsDeleted {
+		t.Fatalf("expected in-scope create newf in %s", describeItems(items))
+	}
+	if created.FileName != "/sub/new.txt" {
+		t.Errorf("newf FileName = %q, want \"/sub/new.txt\"", created.FileName)
+	}
+	if _, ok := findItem(items, pdsFileExternalID("d1", "outf")); ok {
+		t.Errorf("out-of-scope create must not be synced: %s", describeItems(items))
+	}
+	moved, ok := findItem(items, pdsFileExternalID("d1", "moved"))
+	if !ok || !moved.IsDeleted {
+		t.Errorf("expected tombstone for file moved out of scope in %s", describeItems(items))
+	}
+	gone, ok := findItem(items, pdsFileExternalID("d1", "gone"))
+	if !ok || !gone.IsDeleted {
+		t.Errorf("expected tombstone for deleted file in %s", describeItems(items))
+	}
+	// Baseline: newf added; moved/gone dropped; scope persisted.
+	files, _ := newCursor.ConnectorCursor["drive_files"].(map[string]interface{})
+	if _, ok := files["newf"]; !ok {
+		t.Errorf("newf missing from new baseline: %v", files)
+	}
+	if _, ok := files["moved"]; ok {
+		t.Errorf("moved must be dropped from baseline: %v", files)
+	}
+	if _, ok := files["gone"]; ok {
+		t.Errorf("gone must be dropped from baseline: %v", files)
+	}
+	// Only the in-scope file may be downloaded.
+	if n := f.callCount("file/get_download_url"); n != 1 {
+		t.Errorf("expected exactly 1 download URL call, got %d", n)
 	}
 }
 

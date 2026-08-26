@@ -121,6 +121,32 @@ func isCursorExpiredErr(err error) bool {
 		strings.Contains(s, "cursor is not exist")
 }
 
+// isNotFoundErr reports whether err is a PDS "resource does not exist"
+// error (HTTP 404 with a NotFound* code, e.g. NotFound.File). Used to
+// tell a deleted scope folder from a transient GetFile failure.
+func isNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr *pdsAPIError
+	if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+		return true
+	}
+	var carrier sdkCodeCarrier
+	if errors.As(err, &carrier) {
+		if code := carrier.GetCode(); code != nil {
+			c := strings.ToLower(strings.TrimSpace(*code))
+			if strings.Contains(c, "notfound") || strings.Contains(c, "not_found") {
+				return true
+			}
+		}
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "not found") ||
+		strings.Contains(s, "cannot be found") ||
+		strings.Contains(s, "is not exist")
+}
+
 // client is a thin PDS OpenAPI wrapper for the OAuth bearer-token auth
 // paths (access_token / refresh_token). AK/SK credentials use the
 // official SDK instead (client_sdk.go). A client is bound to one Config;

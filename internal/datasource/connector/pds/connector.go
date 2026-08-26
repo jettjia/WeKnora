@@ -110,6 +110,50 @@ func resolveDriveID(ctx context.Context, config *types.DataSourceConfig) (Settin
 	return settings, driveID, nil
 }
 
+// syncScope narrows a drive sync to the folders/files the user picked in
+// the resource tree. An empty scope (no roots) means "sync the whole
+// drive" — the drive-level selection behavior.
+//
+// PDS's change feed (file/list_delta) is drive-wide with no folder
+// filter, so a scoped sync consumes the whole feed and keeps only the
+// items that live under one of the scope roots (membership is resolved
+// by walking the parent chain via file/get, cached per sync).
+type syncScope struct {
+	roots   []string
+	rootSet map[string]bool
+}
+
+// newSyncScope builds a scope from the picked file/folder IDs.
+func newSyncScope(roots []string) syncScope {
+	set := make(map[string]bool, len(roots))
+	for _, r := range roots {
+		set[r] = true
+	}
+	return syncScope{roots: roots, rootSet: set}
+}
+
+// active reports whether the scope narrows the sync at all.
+func (s syncScope) active() bool { return len(s.roots) > 0 }
+
+// contains reports whether id is one of the scope roots.
+func (s syncScope) contains(id string) bool { return s.rootSet[id] }
+
+// matches reports whether the scope equals a persisted cursor's scope
+// roots (order-insensitive). A scope change forces a re-bootstrap so the
+// baseline is rebuilt for the new subtree and out-of-scope files get
+// tombstoned.
+func (s syncScope) matches(persisted []string) bool {
+	if len(persisted) != len(s.roots) {
+		return false
+	}
+	for _, r := range persisted {
+		if !s.rootSet[r] {
+			return false
+		}
+	}
+	return true
+}
+
 // ListResources implements the 3-level lazy picker:
 //
 //   - parentID == ""                     -> list all drives the credentials can read
@@ -293,6 +337,10 @@ type pdsCursor struct {
 	LastSyncTime    time.Time         `json:"last_sync_time"`
 	ListDeltaCursor string            `json:"list_delta_cursor,omitempty"`
 	DriveFiles      map[string]string `json:"drive_files,omitempty"`
+	// ScopeRoots are the file/folder IDs the sync was scoped to when the
+	// cursor was written (empty = whole drive). A change of scope forces
+	// a re-bootstrap.
+	ScopeRoots []string `json:"scope_roots,omitempty"`
 }
 
 // parsePrevCursor decodes the persisted connector cursor, tolerating a
@@ -324,13 +372,21 @@ func toSyncCursor(p *pdsCursor) *types.SyncCursor {
 }
 
 // needsBootstrap reports whether the sync must start with a full drive
-// walk instead of the delta feed. Three states qualify: no cursor at all
+// walk instead of the delta feed. Four states qualify: no cursor at all
 // (true first run), a cursor without a server delta position, and the
 // "stale handshake" state where an earlier run captured the delta cursor
 // but never observed any files (the delta feed alone would then return
-// nothing forever).
-func needsBootstrap(prev *pdsCursor) bool {
-	return prev == nil || prev.ListDeltaCursor == "" || len(prev.DriveFiles) == 0
+// nothing forever), and a scope change (the baseline must be rebuilt for
+// the new subtree so out-of-scope files get tombstoned).
+func needsBootstrap(prev *pdsCursor, scope syncScope) bool {
+	if prev == nil || prev.ListDeltaCursor == "" || len(prev.DriveFiles) == 0 {
+		return true
+	}
+	// Scope changed since the cursor was written (e.g. the user picked a
+	// folder after syncing the whole drive): rebuild the baseline for the
+	// new subtree; the walk's deletion diff tombstones everything outside
+	// it.
+	return !scope.matches(prev.ScopeRoots)
 }
 
 // sink abstracts where fetched items and cursor checkpoints go. The
@@ -341,10 +397,12 @@ type sink struct {
 	checkpoint func(ctx context.Context, cursor *pdsCursor) error // optional
 }
 
-// FetchAll performs a full sync of the configured drive. The resourceIDs
-// parameter is ignored by design: a PDS data source syncs the whole
-// selected drive (the picker's drive selection determines scope; folder
-// selections narrow only what the picker revealed, not the sync itself).
+// FetchAll performs a full sync of the configured drive. The sync follows
+// the picker selection stored in config.ResourceIDs: a folder/file
+// selection narrows the sync to those subtrees (however deep), while a
+// drive-level selection syncs the whole drive. The resourceIDs parameter
+// is ignored in favor of config.ResourceIDs, which the picker keeps
+// current.
 func (c *Connector) FetchAll(
 	ctx context.Context, config *types.DataSourceConfig, _ []string,
 ) ([]types.FetchedItem, error) {
@@ -360,13 +418,14 @@ func (c *Connector) FetchAll(
 	if err != nil {
 		return nil, fmt.Errorf("pds client init: %w", err)
 	}
+	scope := newSyncScope(ScopeRootsFromConfig(config, driveID))
 
 	var items []types.FetchedItem
 	s := sink{emit: func(_ context.Context, item types.FetchedItem) error {
 		items = append(items, item)
 		return nil
 	}}
-	if _, err := c.syncFullDrive(ctx, cli, driveID, settings, nil, s); err != nil {
+	if _, err := c.syncFullDrive(ctx, cli, driveID, settings, scope, nil, s); err != nil {
 		return nil, err
 	}
 	return items, nil
@@ -399,11 +458,12 @@ func (c *Connector) FetchIncremental(
 		items = append(items, item)
 		return nil
 	}}
+	scope := newSyncScope(ScopeRootsFromConfig(config, driveID))
 	var cursor *pdsCursor
-	if needsBootstrap(prev) {
-		cursor, err = c.syncFullDrive(ctx, cli, driveID, settings, prev, s)
+	if needsBootstrap(prev, scope) {
+		cursor, err = c.syncFullDrive(ctx, cli, driveID, settings, scope, prev, s)
 	} else {
-		cursor, err = c.syncDeltaDrive(ctx, cli, driveID, settings, prev, s)
+		cursor, err = c.syncDeltaDrive(ctx, cli, driveID, settings, scope, prev, s)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -439,11 +499,12 @@ func (c *Connector) FetchStream(
 			return h.Checkpoint(ctx, toSyncCursor(p))
 		},
 	}
+	scope := newSyncScope(ScopeRootsFromConfig(config, driveID))
 	var cursor *pdsCursor
-	if needsBootstrap(prev) {
-		cursor, err = c.syncFullDrive(ctx, cli, driveID, settings, prev, s)
+	if needsBootstrap(prev, scope) {
+		cursor, err = c.syncFullDrive(ctx, cli, driveID, settings, scope, prev, s)
 	} else {
-		cursor, err = c.syncDeltaDrive(ctx, cli, driveID, settings, prev, s)
+		cursor, err = c.syncDeltaDrive(ctx, cli, driveID, settings, scope, prev, s)
 	}
 	if err != nil {
 		return nil, err
@@ -451,21 +512,27 @@ func (c *Connector) FetchStream(
 	return toSyncCursor(cursor), nil
 }
 
-// syncFullDrive walks the whole drive folder tree, emits every supported
-// file, and returns a fresh cursor bootstrapped with the latest server
-// delta position. Because the walk is a COMPLETE listing, absence from it
-// is a reliable deletion signal: files recorded in prev but missing now
-// are tombstoned. (Contrast syncDeltaDrive, where absence from a delta
-// page means nothing.)
+// syncFullDrive walks the drive folder tree — the whole drive, or only
+// the picked subtrees when scope is active — emits every supported file,
+// and returns a fresh cursor bootstrapped with the latest server delta
+// position. Because the walk is a COMPLETE listing of the scope, absence
+// from it is a reliable deletion signal: files recorded in prev but
+// missing now (including files that fell OUT of the scope) are
+// tombstoned. (Contrast syncDeltaDrive, where absence from a delta page
+// means nothing.)
 func (c *Connector) syncFullDrive(
 	ctx context.Context, cli pdsAPI, driveID string, settings Settings,
-	prev *pdsCursor, s sink,
+	scope syncScope, prev *pdsCursor, s sink,
 ) (*pdsCursor, error) {
-	if prev != nil && prev.ListDeltaCursor != "" {
+	switch {
+	case prev != nil && !scope.matches(prev.ScopeRoots):
+		logger.Infof(ctx,
+			"[PDS] sync scope changed (roots=%v); re-bootstrapping via full walk", scope.roots)
+	case prev != nil && prev.ListDeltaCursor != "":
 		logger.Infof(ctx,
 			"[PDS] cursor exists but drive_files is empty (stale handshake); re-bootstrapping via full walk")
-	} else {
-		logger.Infof(ctx, "[PDS] bootstrap: capturing delta cursor then full drive walk")
+	default:
+		logger.Infof(ctx, "[PDS] bootstrap: capturing delta cursor then full walk")
 	}
 
 	// Capture the delta cursor BEFORE walking, not after. Order matters:
@@ -484,7 +551,15 @@ func (c *Connector) syncFullDrive(
 		logger.Warnf(ctx, "[PDS] delta cursor capture before bootstrap failed (next sync will re-bootstrap): %v", cerr)
 	}
 
-	files, err := c.listAllFiles(ctx, cli, driveID)
+	var files []pdsFile
+	var err error
+	if scope.active() {
+		logger.Infof(ctx, "[PDS] sync scoped to %d picked resource(s) of drive %s",
+			len(scope.roots), driveID)
+		files, err = c.listScopedFiles(ctx, cli, driveID, scope)
+	} else {
+		files, err = c.listAllFiles(ctx, cli, driveID)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("pds walk drive %s: %w", driveID, err)
 	}
@@ -493,6 +568,7 @@ func (c *Connector) syncFullDrive(
 	cursor := &pdsCursor{
 		LastSyncTime: time.Now().UTC(),
 		DriveFiles:   make(map[string]string),
+		ScopeRoots:   scope.roots,
 	}
 	present := make(map[string]string) // fileID -> updatedAt, for deletion diff
 	emitted := 0
@@ -560,14 +636,19 @@ func (c *Connector) syncFullDrive(
 // almost always just unchanged. Files observed with any other op are
 // re-fetched and upserted (create/overwrite/update/move all converge on
 // "emit the current content").
+//
+// The feed is drive-wide; when scope is active, items outside the picked
+// subtrees are dropped. A previously synced file that MOVES out of scope
+// is tombstoned so the KB follows the selection.
 func (c *Connector) syncDeltaDrive(
 	ctx context.Context, cli pdsAPI, driveID string, settings Settings,
-	prev *pdsCursor, s sink,
+	scope syncScope, prev *pdsCursor, s sink,
 ) (*pdsCursor, error) {
 	cursor := &pdsCursor{
 		LastSyncTime:    time.Now().UTC(),
 		ListDeltaCursor: prev.ListDeltaCursor,
 		DriveFiles:      make(map[string]string, len(prev.DriveFiles)),
+		ScopeRoots:      scope.roots,
 	}
 	// Carry over the baseline so files the delta feed doesn't mention
 	// stay tracked.
@@ -615,7 +696,13 @@ func (c *Connector) syncDeltaDrive(
 			}
 			if it.isDelete() {
 				// Deletion: tombstone files (folders were never ingested),
-				// and drop the entry from the baseline either way.
+				// and drop the entry from the baseline either way. The
+				// baseline doubles as the scope filter: only in-scope
+				// files are tracked, so deletions outside the picked
+				// subtree are skipped here.
+				if _, tracked := cursor.DriveFiles[f.FileID]; !tracked {
+					continue
+				}
 				if !strings.EqualFold(f.Type, "folder") {
 					if err := s.emit(ctx, types.FetchedItem{
 						ExternalID:       pdsFileExternalID(driveID, f.FileID),
@@ -627,6 +714,24 @@ func (c *Connector) syncDeltaDrive(
 					}
 				}
 				delete(cursor.DriveFiles, f.FileID)
+				continue
+			}
+			if scope.active() && !c.inScope(ctx, cli, driveID, f, scope, folderCache) {
+				// Outside the picked subtree. If the file was synced
+				// before, it moved out of scope — tombstone it.
+				if _, tracked := cursor.DriveFiles[f.FileID]; tracked {
+					if !strings.EqualFold(f.Type, "folder") {
+						if err := s.emit(ctx, types.FetchedItem{
+							ExternalID:       pdsFileExternalID(driveID, f.FileID),
+							IsDeleted:        true,
+							SourceResourceID: driveID,
+							Metadata:         baseMetadata(driveID, f.FileID, ""),
+						}); err != nil {
+							return nil, err
+						}
+					}
+					delete(cursor.DriveFiles, f.FileID)
+				}
 				continue
 			}
 			if !settings.IsSupportedFile(f.Name) {
@@ -699,51 +804,155 @@ func (c *Connector) listAllFiles(
 	ctx context.Context, cli pdsAPI, driveID string,
 ) ([]pdsFile, error) {
 	var out []pdsFile
-	var walk func(parentID, parentPath string, depth int) error
-	walk = func(parentID, parentPath string, depth int) error {
-		if depth > 32 {
-			return fmt.Errorf("pds: folder tree depth exceeds 32 (possible cycle)")
-		}
-		marker := ""
-		for {
-			files, nextMarker, err := cli.ListFile(ctx, driveID, parentID, marker)
-			if err != nil {
-				return fmt.Errorf("pds list file (parent=%q): %w", parentID, err)
-			}
-			for _, f := range files {
-				if strings.EqualFold(f.Type, "folder") {
-					f.FilePath = parentPath + f.Name + "/"
-					out = append(out, f)
-					if err := walk(f.FileID, f.FilePath, depth+1); err != nil {
-						// Don't fail the whole sync on a single subtree
-						// error — log and continue. The remaining folders
-						// may still be reachable.
-						logger.Warnf(ctx,
-							"[PDS] recursive walk into folder %s (id=%s) failed: %v",
-							f.Name, f.FileID, err)
-					}
-				} else {
-					// Drive-root files get a bare name (no leading slash).
-					// Nested files get the accumulated parentPath prefix
-					// which already starts with "/<folder>/...".
-					if parentPath == "/" {
-						f.FilePath = f.Name
-					} else {
-						f.FilePath = parentPath + f.Name
-					}
-					out = append(out, f)
-				}
-			}
-			if nextMarker == "" {
-				return nil
-			}
-			marker = nextMarker
-		}
-	}
-	if err := walk("", "/", 0); err != nil {
+	if err := c.walkFolder(ctx, cli, driveID, "", "/", 0, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// listScopedFiles walks each scope root's subtree, stamping ABSOLUTE
+// paths (relative to the drive root) so scoped files land in the same KB
+// folders as they would under a whole-drive sync. A scope root that no
+// longer exists on the drive (deleted in PDS) contributes nothing — the
+// caller's deletion diff then tombstones its former contents.
+func (c *Connector) listScopedFiles(
+	ctx context.Context, cli pdsAPI, driveID string, scope syncScope,
+) ([]pdsFile, error) {
+	var out []pdsFile
+	cache := make(map[string]pdsFile)
+	for _, rootID := range scope.roots {
+		root, err := cli.GetFile(ctx, driveID, rootID)
+		if err != nil {
+			if isNotFoundErr(err) {
+				logger.Warnf(ctx,
+					"[PDS] sync scope root %s no longer exists on drive %s; skipping (its files will be removed)",
+					rootID, driveID)
+				continue
+			}
+			return nil, fmt.Errorf("pds get scope root %q: %w", rootID, err)
+		}
+		dir, ok := c.ancestorAbsPath(ctx, cli, driveID, root, cache)
+		if !ok {
+			logger.Warnf(ctx,
+				"[PDS] sync scope root %s: parent chain unresolved; using drive-root-relative path", rootID)
+			dir = "/"
+		}
+		if strings.EqualFold(root.Type, "folder") {
+			root.FilePath = dir + root.Name + "/"
+			out = append(out, root)
+			if err := c.walkFolder(ctx, cli, driveID, root.FileID, root.FilePath, 0, &out); err != nil {
+				return nil, fmt.Errorf("pds walk scope root %q: %w", rootID, err)
+			}
+		} else {
+			if dir == "/" {
+				root.FilePath = root.Name
+			} else {
+				root.FilePath = dir + root.Name
+			}
+			out = append(out, root)
+		}
+	}
+	// Dedup in case the picked roots overlap (a folder AND one of its
+	// ancestors selected at the same time).
+	if len(scope.roots) > 1 {
+		seen := make(map[string]bool, len(out))
+		deduped := out[:0]
+		for _, f := range out {
+			if seen[f.FileID] {
+				continue
+			}
+			seen[f.FileID] = true
+			deduped = append(deduped, f)
+		}
+		out = deduped
+	}
+	return out, nil
+}
+
+// walkFolder enumerates parentID's direct children via ListFile
+// (following marker pagination), stamps FilePath on each entry, and
+// recurses into sub-folders. Depth-bounded against cycles. Errors on a
+// NESTED subtree are logged and skipped so the remaining folders stay
+// reachable; only the caller's own listing level fails the walk.
+func (c *Connector) walkFolder(
+	ctx context.Context, cli pdsAPI, driveID, parentID, parentPath string,
+	depth int, out *[]pdsFile,
+) error {
+	if depth > 32 {
+		return fmt.Errorf("pds: folder tree depth exceeds 32 (possible cycle)")
+	}
+	marker := ""
+	for {
+		files, nextMarker, err := cli.ListFile(ctx, driveID, parentID, marker)
+		if err != nil {
+			return fmt.Errorf("pds list file (parent=%q): %w", parentID, err)
+		}
+		for _, f := range files {
+			if strings.EqualFold(f.Type, "folder") {
+				f.FilePath = parentPath + f.Name + "/"
+				*out = append(*out, f)
+				if err := c.walkFolder(ctx, cli, driveID, f.FileID, f.FilePath, depth+1, out); err != nil {
+					// Don't fail the whole sync on a single subtree
+					// error — log and continue. The remaining folders
+					// may still be reachable.
+					logger.Warnf(ctx,
+						"[PDS] recursive walk into folder %s (id=%s) failed: %v",
+						f.Name, f.FileID, err)
+				}
+			} else {
+				// Drive-root files get a bare name (no leading slash).
+				// Nested files get the accumulated parentPath prefix
+				// which already starts with "/<folder>/...".
+				if parentPath == "/" {
+					f.FilePath = f.Name
+				} else {
+					f.FilePath = parentPath + f.Name
+				}
+				*out = append(*out, f)
+			}
+		}
+		if nextMarker == "" {
+			return nil
+		}
+		marker = nextMarker
+	}
+}
+
+// ancestorAbsPath returns the absolute path ("/A/B/") of the folder
+// CONTAINING f, walking UP the parent chain via file/get. Lookups are
+// cached in folderCache (shared per sync) so siblings and files in the
+// same subtree pay one file/get per folder, not per file. The drive root
+// itself yields ("/", true). reachedRoot reports whether the chain
+// reached the drive root; when false the result is partial and callers
+// must not trust it.
+func (c *Connector) ancestorAbsPath(
+	ctx context.Context, cli pdsAPI, driveID string, f pdsFile,
+	folderCache map[string]pdsFile,
+) (string, bool) {
+	names := make([]string, 0, 4)
+	parentID := f.ParentID
+	for depth := 0; depth < 32; depth++ {
+		if parentID == "" || strings.EqualFold(parentID, "root") {
+			if len(names) == 0 {
+				return "/", true
+			}
+			return "/" + strings.Join(names, "/") + "/", true
+		}
+		info, ok := folderCache[parentID]
+		if !ok {
+			got, err := cli.GetFile(ctx, driveID, parentID)
+			if err != nil {
+				logger.Warnf(ctx, "[PDS] resolve path: get folder %s (drive=%s): %v",
+					parentID, driveID, err)
+				return "", false
+			}
+			info = got
+			folderCache[parentID] = info
+		}
+		names = append([]string{info.Name}, names...)
+		parentID = info.ParentID
+	}
+	return "", false
 }
 
 // resolveDeltaFilePath reconstructs the readable path of a delta item by
@@ -752,9 +961,6 @@ func (c *Connector) listAllFiles(
 // bootstrap walker's FilePath stamping isn't available on the incremental
 // path. Without this reconstruction an item synced via delta carries only
 // its basename and lands in the KB root instead of its folder.
-//
-// Lookups are cached in folderCache (shared per sync) so siblings and
-// files in the same subtree pay one file/get per folder, not per file.
 //
 // Best-effort: if any lookup fails BEFORE reaching the drive root, the
 // partial chain is untrustworthy and "" is returned — the item then falls
@@ -768,35 +974,50 @@ func (c *Connector) resolveDeltaFilePath(
 	if f.NamePath != "" {
 		return f.NamePath
 	}
-	names := make([]string, 0, 4)
+	dir, reachedRoot := c.ancestorAbsPath(ctx, cli, driveID, f, folderCache)
+	if !reachedRoot {
+		return "" // partial chain — don't stamp a wrong path
+	}
+	if dir == "/" {
+		return f.Name // drive-root file
+	}
+	return dir + f.Name
+}
+
+// inScope reports whether f lives inside one of the scope roots, walking
+// up the parent chain via file/get (cached in folderCache, shared with
+// path resolution). Scope roots themselves are always in scope. A file
+// whose chain can't be resolved is treated as out of scope — best-effort,
+// matching resolveDeltaFilePath's policy; the next bootstrap reconciles.
+func (c *Connector) inScope(
+	ctx context.Context, cli pdsAPI, driveID string, f pdsFile,
+	scope syncScope, folderCache map[string]pdsFile,
+) bool {
+	if !scope.active() || scope.contains(f.FileID) {
+		return true
+	}
 	parentID := f.ParentID
-	reachedRoot := false
 	for depth := 0; depth < 32; depth++ {
 		if parentID == "" || strings.EqualFold(parentID, "root") {
-			reachedRoot = true
-			break
+			return false
+		}
+		if scope.contains(parentID) {
+			return true
 		}
 		info, ok := folderCache[parentID]
 		if !ok {
 			got, err := cli.GetFile(ctx, driveID, parentID)
 			if err != nil {
-				logger.Warnf(ctx, "[PDS] resolve path: get folder %s (drive=%s): %v",
+				logger.Warnf(ctx, "[PDS] scope check: get folder %s (drive=%s): %v",
 					parentID, driveID, err)
-				break
+				return false
 			}
 			info = got
 			folderCache[parentID] = info
 		}
-		names = append([]string{info.Name}, names...)
 		parentID = info.ParentID
 	}
-	if !reachedRoot {
-		return "" // partial chain — don't stamp a wrong path
-	}
-	if len(names) == 0 {
-		return f.Name // drive-root file
-	}
-	return "/" + strings.Join(names, "/") + "/" + f.Name
+	return false
 }
 
 // fetchOneFile downloads a single PDS file's bytes and packages them into

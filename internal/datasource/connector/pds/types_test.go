@@ -3,6 +3,8 @@ package pds
 import (
 	"testing"
 	"time"
+
+	"github.com/Tencent/WeKnora/internal/types"
 )
 
 func TestBuildFolderPathMap_Nested(t *testing.T) {
@@ -65,5 +67,39 @@ func TestBuildFolderPathMap_UnknownParentTreatedAsRoot(t *testing.T) {
 func TestBuildFolderPathMap_EmptyListing(t *testing.T) {
 	if got := buildFolderPathMap(nil); len(got) != 0 {
 		t.Errorf("expected empty map for nil input, got %v", got)
+	}
+}
+
+func TestScopeRootsFromConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		rids []string
+		want []string
+	}{
+		{"drive-level selection", []string{"d1:"}, nil},
+		{"bare drive selection", []string{"d1"}, nil},
+		{"folder selection", []string{"d1:folderA"}, []string{"folderA"}},
+		{"deep folder selection", []string{"d1:deepFolder"}, []string{"deepFolder"}},
+		{"drive plus folder keeps folder", []string{"d1:", "d1:folderA"}, []string{"folderA"}},
+		{"other drive ignored", []string{"d2:folderX"}, nil},
+		{"dedup", []string{"d1:folderA", "d1:folderA"}, []string{"folderA"}},
+		{"empty tokens skipped", []string{"", "d1:folderA"}, []string{"folderA"}},
+	}
+	for _, tc := range cases {
+		cfg := &types.DataSourceConfig{ResourceIDs: tc.rids}
+		got := ScopeRootsFromConfig(cfg, "d1")
+		if len(got) != len(tc.want) {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+				break
+			}
+		}
+	}
+	if got := ScopeRootsFromConfig(nil, "d1"); got != nil {
+		t.Errorf("nil config: got %v, want nil", got)
 	}
 }

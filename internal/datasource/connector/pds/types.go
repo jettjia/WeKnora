@@ -223,6 +223,35 @@ func DriveIDFromConfigOrEnv(config *types.DataSourceConfig) string {
 	return ""
 }
 
+// ScopeRootsFromConfig returns the file/folder IDs the user picked INSIDE
+// the given drive in the resource picker — the sync scope. An empty
+// result means "sync the whole drive".
+//
+// Picker selections are stored as "<driveID>:<fileID>" resourceIDs. A
+// selection with an empty file part ("<driveID>:" or a bare "<driveID>")
+// is a drive-level selection and contributes no scope root; selections
+// belonging to other drives are ignored. Folder selections narrow the
+// sync to that folder's subtree no matter how deep it sits; a file
+// selection narrows it to that single file.
+func ScopeRootsFromConfig(config *types.DataSourceConfig, driveID string) []string {
+	if config == nil || driveID == "" {
+		return nil
+	}
+	var roots []string
+	seen := make(map[string]bool)
+	for _, rid := range config.ResourceIDs {
+		d, f := splitPDSResourceID(strings.TrimSpace(rid))
+		if d == "" || d != driveID || f == "" {
+			continue
+		}
+		if !seen[f] {
+			seen[f] = true
+			roots = append(roots, f)
+		}
+	}
+	return roots
+}
+
 // IsSupportedFile reports whether the given file passes the file_types
 // whitelist. Empty whitelist means everything is allowed. Files without a
 // name (some delta events only carry a file_id) always pass — we cannot
