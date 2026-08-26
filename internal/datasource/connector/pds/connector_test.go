@@ -685,6 +685,39 @@ func TestFetchIncremental_CursorExpired_Recovers(t *testing.T) {
 	}
 }
 
+// TestFetchIncremental_CursorNotFound404_Recovers: production PDS
+// (OpenAPI 2022-03-01) rejects dead cursors with 404 NotFound.Cursor —
+// a code the recovery path historically didn't recognize, so incremental
+// syncs failed hard with "pds list delta". The re-handshake must kick in
+// exactly like for InvalidCursor.
+func TestFetchIncremental_CursorNotFound404_Recovers(t *testing.T) {
+	f := newFakePDS(t)
+	f.setLastCursor("fresh-cursor")
+	f.setDelta("fresh-cursor", []pdsDeltaItem{
+		{File: pdsFile{FileID: "x", Name: "x.txt", Type: "file", UpdatedAt: time.Now()}, Op: "create"},
+	}, false)
+	f.setDownload("x", []byte("x body"), "text/plain")
+	f.expireNextDeltaNotFound()
+
+	c := NewConnector()
+	cursor := &types.SyncCursor{
+		ConnectorCursor: map[string]interface{}{
+			"list_delta_cursor": "stale-cursor",
+			"drive_files":       map[string]string{"prior": time.Now().Format(time.RFC3339)},
+		},
+	}
+	items, _, err := c.FetchIncremental(context.Background(), f.config("d1"), cursor)
+	if err != nil {
+		t.Fatalf("FetchIncremental should recover from NotFound.Cursor: %v", err)
+	}
+	if _, ok := findItem(items, pdsFileExternalID("d1", "x")); !ok {
+		t.Errorf("expected item for \"x\" after recovery in %s", describeItems(items))
+	}
+	if f.callCount("file/get_last_cursor") != 1 {
+		t.Errorf("expected 1 re-handshake, got %d", f.callCount("file/get_last_cursor"))
+	}
+}
+
 // TestFetchIncremental_StaleHandshakeReboots: when the persisted cursor
 // has list_delta_cursor set but drive_files empty (the "stale handshake"
 // state), the sync re-bootstraps via a full walk instead of running

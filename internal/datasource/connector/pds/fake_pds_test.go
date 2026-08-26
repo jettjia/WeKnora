@@ -47,6 +47,7 @@ type fakePDS struct {
 
 	// Test hooks.
 	expireNextDeltaFlag   bool        // next list_delta returns InvalidCursor
+	notFoundNextDeltaFlag bool        // next list_delta returns 404 NotFound.Cursor
 	forceUnauthorizedOnce bool        // next API call returns 401, then succeeds
 	tokenExchanges        int         // oauth/token call count
 	lastAction            string      // most recent action seen
@@ -124,6 +125,15 @@ func (f *fakePDS) expireNextDelta() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.expireNextDeltaFlag = true
+}
+
+// expireNextDeltaNotFound causes the next list_delta call to return the
+// production 404 NotFound.Cursor rejection; subsequent calls succeed
+// normally.
+func (f *fakePDS) expireNextDeltaNotFound() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.notFoundNextDeltaFlag = true
 }
 
 // forceUnauthorized causes the next API call (not oauth/token) to return
@@ -324,6 +334,16 @@ func (f *fakePDS) handleAPI(w http.ResponseWriter, r *http.Request) {
 			f.mu.Unlock()
 			writeJSON(w, http.StatusBadRequest,
 				map[string]string{"code": "InvalidCursor", "message": "cursor expired"})
+			return
+		}
+		if f.notFoundNextDeltaFlag {
+			f.notFoundNextDeltaFlag = false
+			f.mu.Unlock()
+			writeJSON(w, http.StatusNotFound,
+				map[string]string{
+					"code":    "NotFound.Cursor",
+					"message": "The resource cursor cannot be found. cursor is not exist",
+				})
 			return
 		}
 		cursor, _ := body["cursor"].(string)

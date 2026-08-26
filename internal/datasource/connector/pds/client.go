@@ -59,17 +59,50 @@ type cursorExpiredError struct{ err error }
 func (e *cursorExpiredError) Error() string { return e.err.Error() }
 func (e *cursorExpiredError) Unwrap() error { return e.err }
 
+// sdkCodeCarrier is implemented by the Alibaba Cloud SDK error type
+// (*dara.SDKError from alibabacloud-go/tea) so we can read its business
+// error code without importing the SDK here.
+type sdkCodeCarrier interface{ GetCode() *string }
+
+// isCursorRejectedCode reports whether a PDS business error code means
+// the delta cursor is unusable and the caller must re-handshake. PDS
+// deployments disagree on the exact code — older docs list InvalidCursor
+// / CursorExpired / CursorNotFound, while OpenAPI 2022-03-01 returns
+// NotFound.Cursor with HTTP 404 — so we match generically: the code
+// mentions "cursor" plus a rejection marker.
+func isCursorRejectedCode(code string) bool {
+	c := strings.ToLower(strings.TrimSpace(code))
+	if c == "" || !strings.Contains(c, "cursor") {
+		return false
+	}
+	for _, marker := range []string{
+		"invalid", "expired", "notfound", "not_found", "notexist", "not_exist",
+	} {
+		if strings.Contains(c, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // isCursorExpiredErr reports whether err is (or wraps) a cursor-expired
-// failure. PDS varies the wire code between deployments, so we match the
-// documented codes plus a message fallback.
+// failure: the persisted delta cursor was rejected by PDS and the
+// connector should re-handshake via GetLastCursor. Matches the business
+// code on both transports (pdsAPIError for the OAuth client, the SDK's
+// own error type for AK/SK) plus a message fallback. The wire code
+// varies between deployments — observed in the wild: InvalidCursor,
+// CursorExpired, CursorNotFound, and 404 NotFound.Cursor.
 func isCursorExpiredErr(err error) bool {
 	if err == nil {
 		return false
 	}
 	var apiErr *pdsAPIError
-	if errors.As(err, &apiErr) {
-		switch apiErr.Code {
-		case "InvalidCursor", "CursorExpired", "CursorNotFound":
+	if errors.As(err, &apiErr) && isCursorRejectedCode(apiErr.Code) {
+		return true
+	}
+	var carrier sdkCodeCarrier
+	if errors.As(err, &carrier) {
+		if code := carrier.GetCode(); code != nil && isCursorRejectedCode(*code) {
 			return true
 		}
 	}
@@ -81,7 +114,11 @@ func isCursorExpiredErr(err error) bool {
 	return strings.Contains(s, "invalidcursor") ||
 		strings.Contains(s, "cursor_expired") ||
 		strings.Contains(s, "cursor expired") ||
-		strings.Contains(s, "invalid cursor")
+		strings.Contains(s, "invalid cursor") ||
+		strings.Contains(s, "notfound.cursor") ||
+		strings.Contains(s, "cursor not found") ||
+		strings.Contains(s, "cursor cannot be found") ||
+		strings.Contains(s, "cursor is not exist")
 }
 
 // client is a thin PDS OpenAPI wrapper for the OAuth bearer-token auth
