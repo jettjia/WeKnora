@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -118,7 +119,7 @@ func TestSandboxIdentityChanged(t *testing.T) {
 			old:  cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app"),
 			new: func() *types.TenantSandboxConfig {
 				cfg := cubeCfg("key-a", "https://cube.example.com", "https://proxy.example.com", "cube.app")
-				cfg.Cube.DNSServers = []string{"192.0.2.53"}
+				cfg.Cube.DNSServers = []string{"8.8.8.8"}
 				return cfg
 			}(),
 			want: false,
@@ -1513,6 +1514,9 @@ func TestDeleteReleasesSkillSnapshotsBeforeSoftDelete(t *testing.T) {
 	require.Empty(t, fx.skills.skills, "tenant_skills rows must be dropped before SoftDelete")
 	require.True(t, fx.skills.ledgerCleared)
 	require.Equal(t, []string{"bundle://skill-a.zip"}, fx.files.deleted)
+	// DeleteSkill only takes values filed under a skill; the config-wide ones
+	// would outlive the config without this.
+	require.Equal(t, []string{"7:cfg-a"}, fx.skills.envVarsClearedFor)
 }
 
 func TestDeleteRefusesWhenSnapshotReleaseFailsWithoutForce(t *testing.T) {
@@ -1747,10 +1751,11 @@ func (c *snapshotReleaseClient) DeleteSnapshot(ctx context.Context, snapshotID s
 }
 
 type deleteSkillStore struct {
-	snapshots     []*types.TenantSkillSnapshotEntity
-	skills        []*types.TenantSkillEntity
-	marks         []string
-	ledgerCleared bool
+	snapshots         []*types.TenantSkillSnapshotEntity
+	skills            []*types.TenantSkillEntity
+	marks             []string
+	ledgerCleared     bool
+	envVarsClearedFor []string
 }
 
 func (s *deleteSkillStore) snapshot(id string) *types.TenantSkillSnapshotEntity {
@@ -1843,6 +1848,16 @@ func (s *deleteSkillStore) DeleteSnapshotRowsByConfig(ctx context.Context, tenan
 		kept = append(kept, row)
 	}
 	s.snapshots = kept
+	return nil
+}
+
+func (s *deleteSkillStore) DeleteUserEnvVarsByConfig(
+	ctx context.Context, tenantID uint64, configID string,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.envVarsClearedFor = append(s.envVarsClearedFor, fmt.Sprintf("%d:%s", tenantID, configID))
 	return nil
 }
 
