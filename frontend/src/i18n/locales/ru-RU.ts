@@ -1107,7 +1107,8 @@ export default {
       contextTemplate: 'Определите формат передачи найденного контента модели',
       model: 'Выберите LLM, используемую агентом',
       temperature: 'Контроль случайности выхода: 0 — наиболее детерминированный, 1 — наиболее случайный',
-      maxTokens: 'Максимальное количество токенов в ответе модели',
+      maxTokens: 'Максимум токенов в ответе. «По умолчанию» — 2048. «Своё» сохраняет введённое число.',
+      maxTokensAgent: 'Максимум токенов за один раунд рассуждения, включая JSON вызовов инструментов. «По умолчанию»: 4096 без песочницы, 24576 с записью/правкой файлов. «Своё» сохраняет введённое число и больше не меняется.',
       thinking: 'Включить расширенное мышление модели (требуется поддержка модели)',
       conversationSection: 'Настройка параметров многооборотного диалога и перефразирования вопросов',
       conversationSectionAgent: 'Объём предыдущего диалога в каждом ходе. Умные рассуждения всегда многооборотные',
@@ -1317,6 +1318,8 @@ export default {
       executeSkillScript: 'Выполнение скрипта навыка',
       listSandboxFiles: 'Список файлов песочницы',
       readSandboxFile: 'Чтение файла песочницы',
+      writeSandboxFile: 'Запись файла песочницы',
+      editSandboxFile: 'Правка файла песочницы',
       shellExec: 'Выполнение команды в песочнице',
       dataAnalysis: 'Анализ данных',
       dataSchema: 'Структура данных',
@@ -1330,7 +1333,10 @@ export default {
     sandboxFiles: {
       found: 'Найдено файлов: {count}',
       empty: 'Нет файлов',
-      truncated: 'Список обрезан'
+      truncated: 'Список обрезан',
+      wrote: 'Записано',
+      edited: 'Изменено',
+      replacements: 'Замен: {count}'
     },
     shellExec: {
       workDir: 'Каталог',
@@ -5739,6 +5745,8 @@ export default {
       rewritePromptUser: 'Rewrite User Prompt',
       rewritePromptUserPlaceholder: 'Leave empty to use default prompt',
       maxCompletionTokens: 'Max Completion Tokens',
+      maxCompletionTokensDefault: 'По умолчанию',
+      maxCompletionTokensCustom: 'Своё',
       fallbackStrategy: 'Fallback Strategy',
       fallbackResponse: 'Fixed Response',
       fallbackResponsePlaceholder: 'Sorry, I cannot answer this question.',

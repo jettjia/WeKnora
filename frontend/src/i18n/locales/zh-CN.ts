@@ -1109,7 +1109,8 @@ export default {
       contextTemplate: '定义如何将检索到的内容格式化后传递给模型',
       model: '选择智能体使用的大语言模型',
       temperature: '控制输出的随机性，0 最确定，1 最随机',
-      maxTokens: '模型生成回复的最大Token数量',
+      maxTokens: '模型生成回复的最大 Token 数。选「默认」时为 2048；选「自定义」后按你填的数保存。',
+      maxTokensAgent: '每一轮推理的最大生成 Token（含工具调用 JSON）。选「默认」时，未绑沙箱为 4096，绑了沙箱（可写/改文件）为 24576。选「自定义」后按你填的数保存，不再自动改。',
       thinking: '启用模型的扩展思考能力（需要模型支持）',
       conversationSection: '配置多轮对话开关与问题改写开关（改写提示词见「提示词」）',
       conversationSectionAgent: '配置每轮携带多少历史对话。智能推理始终为多轮模式。',
@@ -1319,6 +1320,8 @@ export default {
       executeSkillScript: '执行技能脚本',
       listSandboxFiles: '列出沙箱文件',
       readSandboxFile: '读取沙箱文件',
+      writeSandboxFile: '写入沙箱文件',
+      editSandboxFile: '编辑沙箱文件',
       shellExec: '执行沙箱命令',
       dataAnalysis: '数据分析',
       dataSchema: '数据结构',
@@ -1332,7 +1335,10 @@ export default {
     sandboxFiles: {
       found: '找到 {count} 个文件',
       empty: '暂无文件',
-      truncated: '列表已截断'
+      truncated: '列表已截断',
+      wrote: '已写入',
+      edited: '已编辑',
+      replacements: '替换 {count} 处'
     },
     shellExec: {
       workDir: '目录',
@@ -5741,6 +5747,8 @@ export default {
       rewritePromptUser: '改写用户提示词',
       rewritePromptUserPlaceholder: '留空使用系统默认提示词',
       maxCompletionTokens: '最大生成Token数',
+      maxCompletionTokensDefault: '默认',
+      maxCompletionTokensCustom: '自定义',
       fallbackStrategy: '兜底策略',
       fallbackResponse: '固定回复内容',
       fallbackResponsePlaceholder: '抱歉，我无法回答这个问题。',

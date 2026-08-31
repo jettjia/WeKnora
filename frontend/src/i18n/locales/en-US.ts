@@ -1009,6 +1009,8 @@ export default {
       rewritePromptUser: 'Rewrite User Prompt',
       rewritePromptUserPlaceholder: 'Leave empty to use default prompt',
       maxCompletionTokens: 'Max Completion Tokens',
+      maxCompletionTokensDefault: 'Default',
+      maxCompletionTokensCustom: 'Custom',
       fallbackStrategy: 'Fallback Strategy',
       fallbackResponse: 'Fixed Response',
       fallbackResponsePlaceholder: 'Sorry, I cannot answer this question.',
@@ -5333,6 +5335,8 @@ export default {
       executeSkillScript: 'Execute Skill Script',
       listSandboxFiles: 'List sandbox files',
       readSandboxFile: 'Read sandbox file',
+      writeSandboxFile: 'Write sandbox file',
+      editSandboxFile: 'Edit sandbox file',
       shellExec: 'Run sandbox command',
       dataAnalysis: 'Data Analysis',
       dataSchema: 'Data Schema',
@@ -5346,7 +5350,10 @@ export default {
     sandboxFiles: {
       found: 'Found {count} file(s)',
       empty: 'No files',
-      truncated: 'List truncated'
+      truncated: 'List truncated',
+      wrote: 'Wrote',
+      edited: 'Edited',
+      replacements: 'Replaced {count}'
     },
     shellExec: {
       workDir: 'Directory',
@@ -5525,7 +5532,8 @@ export default {
       contextTemplate: 'Define how retrieved content is formatted before passing to the model',
       model: 'Select the LLM used by the agent',
       temperature: 'Control output randomness, 0 is most deterministic, 1 is most random',
-      maxTokens: 'Maximum number of tokens for model-generated responses',
+      maxTokens: 'Maximum tokens for the model reply. Default is 2048. Custom values are saved as entered.',
+      maxTokensAgent: 'Maximum tokens generated in each reasoning round, including tool-call JSON. Default is 4096 without a sandbox, or 24576 when a sandbox can write or edit files. A custom value is saved as entered and is not changed later.',
       thinking: 'Enable extended thinking capability (requires model support)',
       conversationSection: 'Configure multi-turn conversation and query rewriting parameters',
       conversationSectionAgent: 'How much earlier conversation each turn carries. Smart reasoning is always multi-turn',
