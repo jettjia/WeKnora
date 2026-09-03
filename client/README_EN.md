@@ -16,6 +16,7 @@ The client includes the following main functional modules:
 8. **Model Management**: Create, retrieve, update, and delete models
 9. **Evaluation Function**: Start evaluation tasks and get evaluation results
 10. **Sandbox skills**: Install a skill onto a sandbox config (zip upload, or ClawHub / SkillHub / GitHub source) and configure the environment variables it needs
+11. **Auth**: Login, refresh tokens, and switch the active workspace (`SwitchTenant` records the last-active-tenant preference)
 
 ## Usage
 
@@ -202,7 +203,7 @@ if err != nil {
 
 ### Example: Install a sandbox skill from a registry
 
-`source` must be explicit: `@owner/slug` for ClawHub, or a full GitHub / SkillHub URL. Bare `owner/slug` is rejected.
+`source` must be explicit: `@owner/slug` for ClawHub, a full `https://clawhub.ai/skills-sh/owner/repo/slug` (or `skills-sh:owner/repo/slug`) for federated skills.sh listings, or a full GitHub / SkillHub URL. Bare `owner/slug` is rejected.
 
 ```go
 skillID, err := apiClient.InstallSandboxSkillFromSource(
@@ -211,6 +212,18 @@ if err != nil {
     // Handle error
 }
 _ = skillID // follow /sandbox-configs/{id}/skills/{skillID}/install-events
+```
+
+### Example: Stop a stuck install
+
+After a process restart the row may sit at `installing` with nothing running, which hides retry and uninstall. Stop rewrites the row immediately (and cancels the in-process goroutine if one is still alive). Then retry or uninstall as usual.
+
+```go
+skill, err := apiClient.StopSandboxSkill(context.Background(), sandboxConfigID, skillID)
+if err != nil {
+    // Handle error
+}
+_ = skill
 ```
 
 ### Example: Retry a failed install

@@ -234,7 +234,7 @@ export default {
       currentPlaceholder: '请输入当前密码',
       currentRequired: '请输入当前密码',
       newLabel: '新密码',
-      newPlaceholder: '8-32 个字符，需包含字母和数字',
+      newPlaceholder: '请输入新密码',
       confirmLabel: '确认新密码',
       confirmPlaceholder: '再次输入新密码',
       submit: '更新密码',
@@ -1123,7 +1123,7 @@ export default {
       rewriteSystemPrompt: '用于问题改写的系统提示词（留空使用默认）',
       rewriteUserPrompt: '用于问题改写的用户提示词模板（留空使用默认）',
       selectTools: '选择 Agent 可以使用的工具',
-      maxIterations: 'Agent 执行任务时的最大推理步骤数',
+      maxIterations: '限制 Agent 单次任务的推理步数。选「不限制」时会一直跑到模型自然结束或你手动停止。',
       kbScope: '选择智能体可访问的知识库范围',
       webSearch: '启用后智能体可以搜索互联网获取信息',
       webSearchProvider: '为此智能体指定搜索引擎，留空则使用默认搜索引擎',
@@ -1338,7 +1338,8 @@ export default {
       truncated: '列表已截断',
       wrote: '已写入',
       edited: '已编辑',
-      replacements: '替换 {count} 处'
+      replacements: '替换 {count} 处',
+      moreLines: '另有 {count} 行'
     },
     shellExec: {
       workDir: '目录',
@@ -1985,6 +1986,29 @@ export default {
     copySuffix: ' 副本',
     builtinTag: '内置',
     confirmDelete: '确定删除模型「{name}」吗？',
+    usage: {
+      title: '模型无法删除',
+      description: '模型「{name}」仍被以下配置引用。请先打开对应配置并更换模型，再重新删除。',
+      knowledgeBases: '知识库（{count}）',
+      agents: '智能体（{count}）',
+      longTermMemory: '长期记忆',
+      openConfiguration: '打开配置',
+      truncated: '仅显示前 {shown} 个，共 {total} 个',
+      bindings: {
+        embedding_model: 'Embedding 模型',
+        summary_model: '摘要模型',
+        image_processing_model: '图片处理模型',
+        vlm_model: '视觉理解模型',
+        asr_model: '语音识别模型',
+        wiki_synthesis_model: 'Wiki 综合模型',
+        chat_model: '对话模型',
+        rerank_model: '重排序模型',
+        query_understand_model: '问题理解模型',
+        follow_up_model: '追问模型',
+        extract_model: '记忆提取模型',
+        unknown: '其他模型配置'
+      }
+    },
     debug: {
       title: '模型测试',
       description: '向已配置的模型发送真实请求，查看响应与耗时',
@@ -2202,7 +2226,7 @@ export default {
       desc: '用于 Agent 推理和规划的 LLM 模型'
     },
     maxIterations: {
-      desc: 'Agent 执行任务时的最大推理步骤数'
+      desc: '限制 Agent 单次任务的推理步数。选「不限制」时会一直跑到模型自然结束或你手动停止。'
     },
     modelRecommendation: {
       title: '模型推荐'
@@ -2357,6 +2381,11 @@ export default {
       dimensionOverrideDesc: '仅在确认该模型支持 dimensions 参数时开启；默认只使用检测到的实际维度。',
       supportsVisionLabel: '支持视觉/多模态',
       supportsVisionDesc: '模型是否支持图片等多模态输入',
+      contextWindowLabel: '上下文窗口',
+      contextWindowPlaceholder: '默认 {value}',
+      contextWindowDesc: '该模型一次请求能容纳的 token 数。智能体压缩对话历史会按此上限工作。留空则使用默认 200000（200K）。请按厂商文档填写真实值，填大会导致压缩不触发、上游直接拒绝请求。',
+      contextWindowDefaultHint: '未设置，使用默认 {value}',
+      contextWindowTokens: '{count} tokens',
       maxConcurrencyLabel: '后台并发上限',
       maxConcurrencyPlaceholder: '0 表示使用全局默认',
       maxConcurrencyDesc: '限制文档入库/富化等后台任务对该模型的并发调用数（按模型全副本共享）。0 或留空表示沿用全局默认；不影响交互式对话。',
@@ -2460,6 +2489,10 @@ export default {
         openrouter: {
           label: 'OpenRouter',
           description: 'openai/gpt-5.2-chat, google/gemini-3-flash-preview, etc.'
+        },
+        litellm: {
+          label: 'LiteLLM',
+          description: '自托管代理，统一接入 OpenAI、Anthropic、Gemini、Bedrock 等 100+ 厂商。请将占位 URL 换成可访问地址；localhost 需加入 SSRF_WHITELIST。'
         },
         zhipu: {
           label: '智谱 BigModel',
@@ -2731,22 +2764,12 @@ export default {
         emailLabel: '用户邮箱',
         emailPlaceholder: '输入需要重置密码的用户邮箱',
         newPasswordLabel: '新密码',
-        newPasswordPlaceholder: '8-32 个字符，包含字母和数字',
+        newPasswordPlaceholder: '请输入新密码',
         confirmPasswordLabel: '确认新密码',
         confirmPasswordPlaceholder: '再次输入新密码',
         confirmBtn: '确认重置',
         success: '密码已重置，该用户的现有会话已失效',
         failed: '重置密码失败',
-        validation: {
-          emailRequired: '请输入用户邮箱',
-          emailInvalid: '请输入有效的邮箱地址',
-          passwordRequired: '请输入新密码',
-          passwordLength: '密码长度必须为 8-32 个字符',
-          passwordLetter: '密码必须包含字母',
-          passwordNumber: '密码必须包含数字',
-          confirmRequired: '请再次输入新密码',
-          passwordMismatch: '两次输入的密码不一致'
-        }
       },
       admins: {
         label: '系统管理员',
@@ -2801,7 +2824,8 @@ export default {
         confirmBtn: '确认保存',
         cancelBtn: '取消',
         emptyValue: '（空）',
-        bodyAuthRegistrationMode: '即将把「{label}」改为：{value}\n\n如果切到 self_serve，公网任何人都可以注册账号 — 务必确认是预期行为。'
+        bodyAuthRegistrationMode: '即将把「{label}」改为：{value}\n\n如果切到 self_serve，公网任何人都可以注册账号 — 务必确认是预期行为。',
+        bodySandboxDockerEnabled: '打开后，空间管理员可以把沙箱指到本机 Docker。本机 docker.sock 等同宿主机 root，只适合已挂载 daemon 或配了 TLS 远程 tcp:// 的私有化单机。'
       },
       enumLabels: {
         auth: {
@@ -2831,14 +2855,19 @@ export default {
           max_owned_per_user: '每个非超管用户通过自助创建可拥有的最大空间数。每次创建空间时实时读取，修改后立即生效。0 表示使用内置默认值 10；负数表示完全关闭限制（不建议在公开部署使用）。',
           self_service_creation_enabled: '是否允许非超管用户主动创建空间。关闭后，普通用户只能通过邀请加入已有空间；跨空间超管仍可创建。修改后立即生效。',
           default_storage_quota_gb: '新建空间时默认分配的存储配额（GB），包含向量、原文、文本、索引等。仅在创建时读取，修改后只对之后新建的空间生效，不会回写已存在的空间。0 或负数表示使用内置默认值 10GB。',
-          auto_create_api_key: '为新空间自动生成 full_access API Key，并在创建响应中返回明文 token。仅用于兼容依赖旧行为的集成；默认关闭，建议通过 API Key 管理显式创建。'
+          auto_create_api_key: '为新空间自动生成 full_access API Key，并在创建响应中返回明文 token。仅用于兼容依赖旧行为的集成；默认关闭，建议通过 API Key 管理显式创建。',
+          auto_accept_invitation: '开启后，空间管理员通过邮箱邀请已注册用户时，对方会立即成为成员，不再经过收件箱确认。关闭时保持「发出邀请 → 被邀请人确认」流程。修改后立即生效。'
         },
         ssrf: {
           whitelist: 'SSRF 防护白名单。可填入 example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1。修改后立即生效。SSRF_WHITELIST_EXTRA 环境变量仍由部署方维护，不在此处覆盖。'
         },
+        sandbox: {
+          docker_enabled: '是否允许 Docker 沙箱后端。本机 docker.sock 等同宿主机 root，默认关闭。仅系统管理员可打开；打开后立即生效，无需重启。私有化单机且已挂载 daemon socket，或配置了带 TLS 的远程 tcp:// 时再启用。'
+        },
         auth: {
           registration_mode: '自助注册模式。self_serve = 任何人可注册账号；invite_only = 关闭公网注册，仅 Owner/Admin 可邀请。修改后立即生效，但谨慎对待 self_serve（公网会接受 spam）。',
-          default_tenant_mode: '公开注册后的空间初始化策略。create_personal 会自动创建个人空间并授予 Owner；tenantless 仅创建账户，用户需要接受邀请或主动创建空间。只影响之后注册的用户。'
+          default_tenant_mode: '公开注册后的空间初始化策略。create_personal 会自动创建个人空间并授予 Owner；tenantless 仅创建账户，用户需要接受邀请或主动创建空间。只影响之后注册的用户。',
+          complex_password_enabled: '是否启用复杂密码。开启后密码必须包含大小写字母、数字和特殊字符。修改后立即生效，只影响新注册用户或新密码修改/重置操作。特殊字符包含：{specialChars}'
         }
       },
       keyLabels: {
@@ -2857,14 +2886,19 @@ export default {
           max_owned_per_user: '每用户最大空间数',
           self_service_creation_enabled: '允许用户自助创建空间',
           default_storage_quota_gb: '新空间默认存储配额 (GB)',
-          auto_create_api_key: '创建空间时自动生成 API Key'
+          auto_create_api_key: '创建空间时自动生成 API Key',
+          auto_accept_invitation: '邀请已注册用户时自动加入'
         },
         ssrf: {
           whitelist: 'SSRF 防护白名单'
         },
+        sandbox: {
+          docker_enabled: '启用 Docker 沙箱'
+        },
         auth: {
           registration_mode: '自助注册模式',
-          default_tenant_mode: '注册默认空间策略'
+          default_tenant_mode: '注册默认空间策略',
+          complex_password_enabled: '启用复杂密码'
         }
       },
       runtime: {
@@ -3087,7 +3121,7 @@ export default {
         security: {
           tab: '网络安全 {count}',
           title: '网络安全',
-          description: '管理可绕过 SSRF 防护的受信主机、IP 与网段。'
+          description: '管理 SSRF 白名单，以及是否允许 Docker 沙箱（本机 docker.sock 等同宿主机 root）。'
         },
         runtime: {
           tab: '运行与并发 {count}',
@@ -4536,7 +4570,7 @@ export default {
     subtitle: 'RAG 问答、ReAct 智能体与 Wiki 知识库，大模型驱动的企业级知识框架',
     registerSubtitle: '创建账户并开始使用 WeKnora',
     emailPlaceholder: '输入邮箱地址',
-    passwordPlaceholder: '输入密码（8-32个字符，包含字母和数字）',
+    passwordPlaceholder: '输入密码',
     confirmPasswordPlaceholder: '再次输入密码',
     usernamePlaceholder: '输入用户名',
     emailRequired: '请输入邮箱地址',
@@ -4545,7 +4579,10 @@ export default {
     passwordMinLength: '密码至少8个字符',
     passwordMaxLength: '密码不能超过32个字符',
     passwordMustContainLetter: '密码必须包含字母',
+    passwordMustContainLowercaseLetter: '密码必须包含小写字母',
+    passwordMustContainUppercaseLetter: '密码必须包含大写字母',
     passwordMustContainNumber: '密码必须包含数字',
+    passwordMustContainSpecialChar: '密码必须包含特殊字符：{specialChars}',
     usernameRequired: '请输入用户名',
     usernameMinLength: '用户名至少2个字符',
     usernameMaxLength: '用户名不能超过20个字符',
@@ -5025,6 +5062,10 @@ export default {
         e2b: 'E2B 托管服务或兼容 E2B 的集群',
         docker: '在本机 Docker 上为每个会话保留一个长驻容器，脚本和文件都落在同一容器里',
       },
+      dockerDisabledAlert: '当前部署未启用 Docker 沙箱',
+      dockerDisabledHint: '本机 docker.sock 等同宿主机 root。仅私有化单机需要时，由系统管理员在「设置 → 系统设置 → 网络安全」中打开。',
+      dockerDisabledCard: '部署未启用 Docker 沙箱，此配置不会再创建容器',
+      dockerHostRisk: '留空或 unix:// 会使用 WeKnora 所在机器的 Docker 守护进程，权限等同该机 root，只适合私有化单机。多套空间共用同一主机时请改用 Cube 或 E2B。远程 tcp:// 必须填写 TLS 证书目录。',
       addConfig: '添加沙箱',
       viewClusterGuide: '集群搭建指南',
       configName: '配置名称',
@@ -5241,14 +5282,17 @@ export default {
       skillUploadHint: '安装会在当前镜像上生成新快照，可能需要数分钟。当前这一轮对话不会中断；下一轮提问时才会按新镜像重建沙箱，会话工作区草稿会在那时清空。',
       skillUploadHintNewSession: '安装会在当前镜像上生成新快照，可能需要数分钟。已打开的会话继续使用原沙箱，直到该会话结束；只有新打开的会话才会带上这次安装的技能。',
       skillSourceSection: '从来源安装',
-      skillSourceSectionHint: '粘贴 ClawHub、GitHub 或 SkillHub 链接，或 {\'@\'}owner/slug。',
+      skillSourceSectionHint: '粘贴 ClawHub、GitHub 或 SkillHub 链接，或 {\'@\'}owner/slug。压缩包不超过 {size} MB。',
       skillUploadSection: '上传本地压缩包',
-      skillUploadSectionHint: '把包含 SKILL.md 的 zip 拖到下方，或点击选择文件。',
+      skillUploadSectionHint: '把包含 SKILL.md 的 zip 拖到下方，或点击选择文件。压缩包不超过 {size} MB。',
       skillSourcePlaceholder: 'ClawHub 用 {\'@\'}owner/slug，GitHub / SkillHub 请粘贴完整链接',
       skillSourceInstall: '安装',
       skillInstallOr: '或',
       skillSourceFailed: '从托管平台安装技能失败',
       skillUploadFailed: '技能上传失败',
+      skillBundleTooLarge: '技能压缩包不能超过 {size} MB。',
+      skillBundleTooManyFiles: '技能目录里的文件不能超过 {count} 个。',
+      skillBundleTooManyZipEntries: '压缩包条目不能超过 {count} 个。',
       skillUploading: '正在上传 {percent}%',
       skillUploadAccepted: '已开始安装技能',
       skillStatusInstalling: '安装中',
@@ -5259,6 +5303,16 @@ export default {
       skillDisableHint: '禁用后该技能对智能体不可见，文件仍保留在镜像中。变更将在会话下一次执行时生效。',
       skillDeleteHint: '删除会从镜像中移除该技能目录并生成新快照。当前这一轮对话不会中断；下一轮提问时才会按新镜像重建沙箱，会话工作区草稿会在那时清空。',
       skillDeleteHintNewSession: '删除会从镜像中移除该技能目录并生成新快照。已打开的会话继续使用原沙箱，直到该会话结束；只有新打开的会话才会去掉该技能。',
+      skillRemoveInProgress: '正在卸载',
+      skillRemoveWaiting: '已开始从镜像卸载，正在等待进度…',
+      skillRemoveDone: '已从沙箱卸载「{name}」。技能仍在目录里，可以稍后再装回去。',
+      skillRemoveStage: {
+        accepted: '已接受卸载请求',
+        sandbox_ready: '正在打开维护沙箱',
+        removed: '文件已删除，正在生成新镜像',
+        done: '卸载完成',
+        failed: '卸载失败',
+      },
       imageInfoTitle: '当前镜像',
       imageInfoSnapshot: '快照 ID',
       imageInfoGeneration: '版本',
@@ -5292,6 +5346,10 @@ export default {
       skillRetryHint: '用已保存的安装包重试，无需重新上传',
       skillRetryAccepted: '已开始重新安装',
       skillRetryFailed: '重新安装失败',
+      skillStop: '停止安装',
+      skillStopHint: '中止当前安装，之后可以重试或卸载',
+      skillStopAccepted: '已停止',
+      skillStopFailed: '停止失败',
       skillEmpty: '尚未安装技能。粘贴托管平台链接，或上传 zip。',
       skillVersion: '版本',
       skillVersionEmpty: '未填写',
@@ -5349,10 +5407,13 @@ export default {
       installedOnName: '已安装到 {name}',
       installedCount: '已安装到 {count} 个沙箱',
       installPanelGroup: '已安装',
+      installPanelAvailable: '未安装',
+      viewInstallProgress: '查看进度',
       manageOnSandbox: '管理沙箱「{name}」上的安装',
       manageDrawerDesc: '在沙箱「{name}」上管理启用、变量和卸载。',
       manageEnable: '启用',
       manageUninstall: '从沙箱卸载',
+      manageUninstallConfirm: '确定从该沙箱卸载「{name}」？',
       deleteCatalog: '从目录删除',
       deleteCatalogConfirm: '确定从目录删除「{name}」？请先从所有沙箱卸载。',
       deleteCatalogBlocked: '请先从所有沙箱卸载此技能。',
@@ -5628,6 +5689,9 @@ export default {
     toolCalls: '调用 <strong>{tools}</strong> 次工具',
     durationSuffix: '耗时 <strong>{duration}</strong>',
     stepSummarySeparator: ' · ',
+    contextCompacted: '压缩上下文',
+    contextCompactedSummary: '{before} → {after} tokens',
+    contextCompactedDegraded: '摘要不可用，已保留原始记录',
     title: '智能体',
     subtitle: '配置和管理您的智能体，自定义对话行为和能力',
     createAgent: '创建智能体',
@@ -5727,6 +5791,8 @@ export default {
       rerankModelPlaceholder: '请选择 ReRank 模型',
       rerankModelOptionalHint: '当前作用域内暂无 RAG 类型知识库，可不填；后续若加入 RAG 知识库，将自动使用空间默认重排模型，仍建议显式配置。',
       maxIterations: '最大迭代次数',
+      maxIterationsLimit: '限制',
+      maxIterationsUnlimited: '不限制',
       allowedTools: '允许的工具',
       multiTurn: '多轮对话',
       historyTurns: '保留轮数',
@@ -5758,24 +5824,25 @@ export default {
       fallbackPrompt: '兜底提示词',
       fallbackPromptPlaceholder: '留空使用系统默认提示词',
       skillsConfig: '技能',
-      skillsConfigDesc: '先选择运行沙箱，再从空间目录中选用。未装到该沙箱的技能可以看见，但要先安装才能勾选。',
-      skillsSelection: '可用技能',
-      skillsSelectionDesc: '列表来自空间技能目录。只能启用当前沙箱上已就绪的技能。',
+      skillsConfigDesc: '先选择运行沙箱，再从下面列表选用技能。没装到该沙箱的会显示「安装」，装好后才能勾选。',
+      skillsSelection: '技能列表',
+      skillsSelectionDesc: '这里列出空间目录中的技能。已装到当前沙箱的可以直接用；没装的请先点「安装」。',
       skillsAll: '全部',
       skillsSelected: '指定',
       skillsNone: '禁用',
       selectSkills: '选择技能',
-      selectSkillsDesc: '勾选要启用的技能。未安装或未就绪的不能勾选。',
-      skillsAllListHint: '将启用此沙箱上已就绪的技能。未安装的不会自动带上，装好后才会纳入「全部」。',
-      skillsListSummary: '{ready} 个已就绪，{pending} 个尚未可在此沙箱启用',
-      skillsListSummaryReadyOnly: '{ready} 个已就绪',
+      selectSkillsDesc: '勾选要给这个智能体用的技能。没装到当前沙箱的不能勾选，请先点右侧「安装」。',
+      skillsAllListHint: '「全部」只包含已装到此沙箱的技能。没装的不会自动带上，点「安装」装好后才会算进去。',
+      skillsGroupAvailable: '可用',
+      skillsGroupUnavailable: '不可用',
       noSkillsAvailable: '空间目录里还没有技能。',
       skillsNeedSandbox: '请先选择运行沙箱。',
       goSandboxSettings: '管理沙箱',
       goSkillSettings: '管理技能',
       installToThisSandbox: '安装到此沙箱',
       installShort: '安装',
-      skillNotInstalled: '未安装到当前沙箱',
+      viewInstallProgress: '查看进度',
+      skillNotInstalled: '未安装',
       skillNotReady: '尚未就绪',
       skillDisabledOnSandbox: '已在沙箱中停用',
       sandboxBackend: '运行沙箱',

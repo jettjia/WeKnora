@@ -1428,6 +1428,9 @@ func TestSanitizeSandboxConfigRefusesSecretsWithoutAESKey(t *testing.T) {
 	require.Error(t, err)
 
 	// A config without secrets is still allowed in that deployment.
+	sandbox.ClearDockerBackendEnabledOverride()
+	t.Cleanup(sandbox.ClearDockerBackendEnabledOverride)
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
 	_, err = SanitizeSandboxConfig(&types.TenantSandboxConfig{
 		SandboxType: "docker",
 		Docker:      &types.DockerSandboxConfig{Image: "weknora:test"},
@@ -1442,6 +1445,9 @@ func TestSandboxesStillLiveErrorSupportsErrorsIs(t *testing.T) {
 }
 
 func TestCreateAcceptsDockerNamedSandboxBackend(t *testing.T) {
+	sandbox.ClearDockerBackendEnabledOverride()
+	t.Cleanup(sandbox.ClearDockerBackendEnabledOverride)
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
 	repo := &fakeConfigRepo{}
 	svc := newTestConfigService(t, repo, nil, stubAgentRepo{})
 
@@ -1467,6 +1473,9 @@ func TestCreateRejectsRemovedLocalBackend(t *testing.T) {
 }
 
 func TestCreateRejectsDockerWithoutImage(t *testing.T) {
+	sandbox.ClearDockerBackendEnabledOverride()
+	t.Cleanup(sandbox.ClearDockerBackendEnabledOverride)
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "true")
 	svc := newTestConfigService(t, &fakeConfigRepo{}, nil, stubAgentRepo{})
 
 	_, err := svc.Create(context.Background(), 7, CreateSandboxConfigInput{
@@ -1475,6 +1484,22 @@ func TestCreateRejectsDockerWithoutImage(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, sandbox.ErrSandboxConfigIncomplete)
+}
+
+func TestCreateRejectsDockerWhenDisabled(t *testing.T) {
+	sandbox.ClearDockerBackendEnabledOverride()
+	t.Cleanup(sandbox.ClearDockerBackendEnabledOverride)
+	t.Setenv(sandbox.DockerBackendEnabledEnv, "")
+	svc := newTestConfigService(t, &fakeConfigRepo{}, nil, stubAgentRepo{})
+
+	_, err := svc.Create(context.Background(), 7, CreateSandboxConfigInput{
+		Name: "docker-dev",
+		Config: &types.TenantSandboxConfig{
+			SandboxType: "docker",
+			Docker:      &types.DockerSandboxConfig{Image: "weknora:test"},
+		},
+	})
+	require.ErrorIs(t, err, sandbox.ErrDockerBackendDisabled)
 }
 
 func TestWorkspaceScriptsDisabledPolicy(t *testing.T) {
@@ -1513,10 +1538,52 @@ func TestDeleteReleasesSkillSnapshotsBeforeSoftDelete(t *testing.T) {
 	require.NotContains(t, fx.skills.marks, "row-0:"+types.SkillSnapshotStateDeleted)
 	require.Empty(t, fx.skills.skills, "tenant_skills rows must be dropped before SoftDelete")
 	require.True(t, fx.skills.ledgerCleared)
-	require.Equal(t, []string{"bundle://skill-a.zip"}, fx.files.deleted)
+	require.Empty(t, fx.files.deleted,
+		"deleting a sandbox must not drop the catalog archive")
 	// DeleteSkill only takes values filed under a skill; the config-wide ones
 	// would outlive the config without this.
 	require.Equal(t, []string{"7:cfg-a"}, fx.skills.envVarsClearedFor)
+}
+
+// An install row names an archive only when a re-register replaced the
+// definition's copy and this sandbox kept running the image built from the old
+// one. Deleting the config drops the only reader those bytes will ever have, so
+// they have to go with it — nothing else records that the version existed.
+func TestDeleteReclaimsArchivePinnedOnlyByThisConfig(t *testing.T) {
+	fx := newSnapshotReleaseFixture(t, nil)
+	fx.skills.skills[0].BundleRef = "bundle://skill-a-v1.zip"
+
+	require.NoError(t, fx.svc.Delete(context.Background(), 7, "cfg-a", false))
+
+	require.Equal(t, []string{"bundle://skill-a-v1.zip"}, fx.files.deleted)
+}
+
+func TestDeleteKeepsArchiveAnotherConfigStillPins(t *testing.T) {
+	fx := newSnapshotReleaseFixture(t, nil)
+	fx.skills.skills[0].BundleRef = "bundle://skill-a-v1.zip"
+	// A sibling sandbox was built from the same replaced archive and is not
+	// being deleted, so the pin is not this config's to release.
+	fx.skills.skills = append(fx.skills.skills, &types.TenantSkillEntity{
+		ID: "sk-2", TenantID: 7, SandboxConfigID: "cfg-b",
+		BundleRef: "bundle://skill-a-v1.zip",
+	})
+
+	require.NoError(t, fx.svc.Delete(context.Background(), 7, "cfg-a", false))
+
+	require.Empty(t, fx.files.deleted)
+}
+
+// A list that cannot be read is not evidence that nothing needs the bytes. A
+// leaked archive costs storage; a deleted one costs some other sandbox its
+// files, so an unreadable table keeps it.
+func TestDeleteKeepsPinnedArchiveWhenReadersCannotBeListed(t *testing.T) {
+	fx := newSnapshotReleaseFixture(t, nil)
+	fx.skills.skills[0].BundleRef = "bundle://skill-a-v1.zip"
+	fx.skills.listTenantErr = stderrors.New("database unavailable")
+
+	require.NoError(t, fx.svc.Delete(context.Background(), 7, "cfg-a", false))
+
+	require.Empty(t, fx.files.deleted)
 }
 
 func TestDeleteRefusesWhenSnapshotReleaseFailsWithoutForce(t *testing.T) {
@@ -1674,6 +1741,12 @@ func newSnapshotReleaseFixture(t *testing.T, failDelete map[string]error) *snaps
 				ID: "sk-1", TenantID: 7, SandboxConfigID: "cfg-a",
 				BundleRef: "bundle://skill-a.zip",
 			}},
+			// The install names the archive the definition itself holds, so
+			// dropping the config must leave those bytes where they are.
+			catalogs: []*types.TenantSkillCatalogEntity{{
+				ID: "cat-1", TenantID: 7, Name: "skill-a",
+				BundleRef: "bundle://skill-a.zip",
+			}},
 		},
 		files: &deleteBundleResolver{},
 	}
@@ -1753,9 +1826,14 @@ func (c *snapshotReleaseClient) DeleteSnapshot(ctx context.Context, snapshotID s
 type deleteSkillStore struct {
 	snapshots         []*types.TenantSkillSnapshotEntity
 	skills            []*types.TenantSkillEntity
+	catalogs          []*types.TenantSkillCatalogEntity
 	marks             []string
 	ledgerCleared     bool
 	envVarsClearedFor []string
+
+	// listTenantErr makes the tenant-wide lookups fail, which is what decides
+	// whether a pinned archive is kept rather than deleted on a bad read.
+	listTenantErr error
 }
 
 func (s *deleteSkillStore) snapshot(id string) *types.TenantSkillSnapshotEntity {
@@ -1813,6 +1891,44 @@ func (s *deleteSkillStore) ListSkillsByConfig(
 	var out []*types.TenantSkillEntity
 	for _, row := range s.skills {
 		if row.TenantID == tenantID && row.SandboxConfigID == configID {
+			cp := *row
+			out = append(out, &cp)
+		}
+	}
+	return out, nil
+}
+
+func (s *deleteSkillStore) ListSkillsByTenant(
+	ctx context.Context, tenantID uint64,
+) ([]*types.TenantSkillEntity, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.listTenantErr != nil {
+		return nil, s.listTenantErr
+	}
+	var out []*types.TenantSkillEntity
+	for _, row := range s.skills {
+		if row.TenantID == tenantID {
+			cp := *row
+			out = append(out, &cp)
+		}
+	}
+	return out, nil
+}
+
+func (s *deleteSkillStore) ListCatalogsByTenant(
+	ctx context.Context, tenantID uint64,
+) ([]*types.TenantSkillCatalogEntity, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.listTenantErr != nil {
+		return nil, s.listTenantErr
+	}
+	var out []*types.TenantSkillCatalogEntity
+	for _, row := range s.catalogs {
+		if row.TenantID == tenantID {
 			cp := *row
 			out = append(out, &cp)
 		}

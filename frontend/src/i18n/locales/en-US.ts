@@ -824,6 +824,9 @@ export default {
     toolCalls: '<strong>{tools}</strong> tool call(s)',
     durationSuffix: '<strong>{duration}</strong>',
     stepSummarySeparator: ' · ',
+    contextCompacted: 'Compacted context',
+    contextCompactedSummary: '{before} → {after} tokens',
+    contextCompactedDegraded: 'Summary unavailable, raw transcript kept',
     title: 'Agents',
     subtitle: 'Configure and manage your agents to customize conversation behavior and capabilities',
     createAgent: 'Create Agent',
@@ -986,6 +989,8 @@ export default {
       rerankModelPlaceholder: 'Select ReRank Model',
       rerankModelOptionalHint: 'No RAG knowledge base in current scope, so this is optional. If a RAG knowledge base is added later, the workspace default rerank model will be used as a fallback. Configuring it explicitly is still recommended.',
       maxIterations: 'Max Iterations',
+      maxIterationsLimit: 'Limit',
+      maxIterationsUnlimited: 'Unlimited',
       allowedTools: 'Allowed Tools',
       multiTurn: 'Multi-turn Conversation',
       historyTurns: 'History Turns',
@@ -1017,24 +1022,25 @@ export default {
       fallbackPrompt: 'Fallback Prompt',
       fallbackPromptPlaceholder: 'Leave empty to use default prompt',
       skillsConfig: 'Skills',
-      skillsConfigDesc: 'Choose the sandbox that runs skill scripts, then pick from the workspace catalog. Skills not installed on that sandbox are visible but cannot be enabled until they are installed.',
-      skillsSelection: 'Available skills',
-      skillsSelectionDesc: 'The list comes from the workspace skill catalog. Only skills that are ready on the selected sandbox can be enabled.',
+      skillsConfigDesc: 'Select a running sandbox, then pick skills below. Skills not on that sandbox show Install and can only be checked after they are installed.',
+      skillsSelection: 'Skill list',
+      skillsSelectionDesc: 'All workspace skills are listed here. Installed ones can be used now; others need Install first.',
       skillsAll: 'All',
       skillsSelected: 'Selected',
       skillsNone: 'Disabled',
       selectSkills: 'Select skills',
-      selectSkillsDesc: 'Choose which skills to enable. Uninstalled or not-ready skills cannot be checked.',
-      skillsAllListHint: 'Ready skills on this sandbox will be enabled. Uninstalled ones are not included until you install them.',
-      skillsListSummary: '{ready} ready, {pending} not ready on this sandbox',
-      skillsListSummaryReadyOnly: '{ready} ready',
+      selectSkillsDesc: 'Check the skills this agent should use. Uninstalled skills cannot be checked — click Install on the right first.',
+      skillsAllListHint: 'All only includes skills already installed on this sandbox. Uninstalled skills are not added until you install them.',
+      skillsGroupAvailable: 'Available',
+      skillsGroupUnavailable: 'Unavailable',
       noSkillsAvailable: 'The workspace catalog has no skills yet.',
       skillsNeedSandbox: 'Select a sandbox first.',
       goSandboxSettings: 'Manage sandboxes',
       goSkillSettings: 'Manage skills',
       installToThisSandbox: 'Install onto this sandbox',
       installShort: 'Install',
-      skillNotInstalled: 'Not installed on this sandbox',
+      viewInstallProgress: 'View progress',
+      skillNotInstalled: 'Not installed',
       skillNotReady: 'Not ready yet',
       skillDisabledOnSandbox: 'Disabled on this sandbox',
       sandboxBackend: 'Sandbox',
@@ -1104,6 +1110,10 @@ export default {
         e2b: 'Managed MicroVM service or an E2B-compatible deployment',
         docker: 'Keep a long-lived container per session on this WeKnora host; scripts and files stay in that container',
       },
+      dockerDisabledAlert: 'Docker sandbox is not enabled on this deployment',
+      dockerDisabledHint: 'A local docker.sock is equivalent to root on the host. For a single-machine private install, a system admin can enable it under Settings → System settings → Network security.',
+      dockerDisabledCard: 'Docker sandbox is disabled on this deployment; this config will not create containers',
+      dockerHostRisk: 'Empty or unix:// uses the Docker daemon on the WeKnora host, which is equivalent to root on that machine. Use this only for a private single-node install. Prefer Cube or E2B when multiple workspaces share a host. Remote tcp:// endpoints require a TLS certificate directory.',
       addConfig: 'Add sandbox',
       viewClusterGuide: 'Cluster setup guide',
       configName: 'Config name',
@@ -1320,14 +1330,17 @@ export default {
       skillUploadHint: 'Install writes the skill onto the current image and takes a new snapshot. This can take several minutes. The current chat turn is not interrupted; open sessions rebuild their sandbox on the next turn, which clears the session workspace scratch.',
       skillUploadHintNewSession: 'Install writes the skill onto the current image and takes a new snapshot. This can take several minutes. Already-open sessions keep their current sandbox until they end; only newly started sessions pick up this install.',
       skillSourceSection: 'Install from a source',
-      skillSourceSectionHint: 'Paste a ClawHub, GitHub or SkillHub link, or {\'@\'}owner/slug.',
+      skillSourceSectionHint: 'Paste a ClawHub, GitHub or SkillHub link, or {\'@\'}owner/slug. The bundle cannot exceed {size} MB.',
       skillUploadSection: 'Upload a local bundle',
-      skillUploadSectionHint: 'Drop a zip that contains SKILL.md below, or click to pick a file.',
+      skillUploadSectionHint: 'Drop a zip that contains SKILL.md below, or click to pick a file. The bundle cannot exceed {size} MB.',
       skillSourcePlaceholder: 'ClawHub: {\'@\'}owner/slug. GitHub/SkillHub: paste the full URL',
       skillSourceInstall: 'Install',
       skillInstallOr: 'or',
       skillSourceFailed: 'Failed to install the skill from the registry',
       skillUploadFailed: 'Failed to upload the skill',
+      skillBundleTooLarge: 'The skill bundle cannot exceed {size} MB.',
+      skillBundleTooManyFiles: 'The skill directory cannot hold more than {count} files.',
+      skillBundleTooManyZipEntries: 'The archive cannot have more than {count} zip entries.',
       skillUploading: 'Uploading {percent}%',
       skillUploadAccepted: 'Skill install started',
       skillStatusInstalling: 'Installing',
@@ -1338,6 +1351,16 @@ export default {
       skillDisableHint: 'Disable = the skill is invisible to the agent, files stay in the image. Changes take effect on the session\'s next execution.',
       skillDeleteHint: 'Delete removes the skill directory from the image and takes a new snapshot. The current chat turn is not interrupted; open sessions rebuild their sandbox on the next turn, which clears the session workspace scratch.',
       skillDeleteHintNewSession: 'Delete removes the skill directory from the image and takes a new snapshot. Already-open sessions keep their current sandbox until they end; only newly started sessions lose this skill.',
+      skillRemoveInProgress: 'Uninstalling',
+      skillRemoveWaiting: 'Uninstall from the image has started. Waiting for progress…',
+      skillRemoveDone: 'Uninstalled “{name}” from this sandbox. It remains in the catalog, so you can install it again later.',
+      skillRemoveStage: {
+        accepted: 'Uninstall request accepted',
+        sandbox_ready: 'Opening a maintenance sandbox',
+        removed: 'Files removed, building a new image',
+        done: 'Uninstall complete',
+        failed: 'Uninstall failed',
+      },
       imageInfoTitle: 'Current image',
       imageInfoSnapshot: 'Snapshot ID',
       imageInfoGeneration: 'Version',
@@ -1371,6 +1394,10 @@ export default {
       skillRetryHint: 'Retry with the stored bundle; no re-upload needed',
       skillRetryAccepted: 'Reinstall started',
       skillRetryFailed: 'Failed to start the reinstall',
+      skillStop: 'Stop install',
+      skillStopHint: 'Abort this install, then retry or uninstall',
+      skillStopAccepted: 'Stopped',
+      skillStopFailed: 'Failed to stop',
       skillEmpty: 'No skills installed yet. Paste a registry URL, or upload a zip.',
       skillVersion: 'Version',
       skillVersionEmpty: 'Not specified',
@@ -1428,10 +1455,13 @@ export default {
       installedOnName: 'Installed on {name}',
       installedCount: 'Installed on {count} sandboxes',
       installPanelGroup: 'Installed',
+      installPanelAvailable: 'Not installed',
+      viewInstallProgress: 'View progress',
       manageOnSandbox: 'Manage this skill on “{name}”',
       manageDrawerDesc: 'Manage enablement, variables, and uninstall on sandbox “{name}”.',
       manageEnable: 'Enable',
       manageUninstall: 'Uninstall from sandbox',
+      manageUninstallConfirm: 'Uninstall “{name}” from this sandbox?',
       deleteCatalog: 'Remove from catalog',
       deleteCatalogConfirm: 'Remove “{name}” from the catalog? Uninstall it from every sandbox first.',
       deleteCatalogBlocked: 'Uninstall this skill from every sandbox first.',
@@ -2124,7 +2154,7 @@ export default {
     subtitle: 'RAG Q&A, ReAct Agent and Wiki — an LLM-powered enterprise knowledge framework',
     registerSubtitle: 'Create your account and start using WeKnora',
     emailPlaceholder: 'Enter email address',
-    passwordPlaceholder: 'Enter password (8-32 characters, including letters and numbers)',
+    passwordPlaceholder: 'Enter password',
     confirmPasswordPlaceholder: 'Enter password again',
     usernamePlaceholder: 'Enter username',
     emailRequired: 'Enter email address',
@@ -2133,7 +2163,10 @@ export default {
     passwordMinLength: 'Password must be at least 8 characters',
     passwordMaxLength: 'Password cannot exceed 32 characters',
     passwordMustContainLetter: 'Password must contain letters',
+    passwordMustContainLowercaseLetter: 'Password must contain lowercase letters',
+    passwordMustContainUppercaseLetter: 'Password must contain uppercase letters',
     passwordMustContainNumber: 'Password must contain numbers',
+    passwordMustContainSpecialChar: 'Password must contain special characters: {specialChars}',
     usernameRequired: 'Enter username',
     usernameMinLength: 'Username must be at least 2 characters',
     usernameMaxLength: 'Username cannot exceed 20 characters',
@@ -3630,7 +3663,7 @@ export default {
         security: {
           tab: 'Network security {count}',
           title: 'Network security',
-          description: 'Manage trusted hosts, IPs, and networks that may bypass SSRF protection.'
+          description: 'Manage the SSRF allowlist and whether the Docker sandbox is allowed (a local docker.sock is equivalent to root on the host).'
         },
         other: {
           tab: 'Other {count}',
@@ -3852,16 +3885,21 @@ export default {
       keyLabels: {
         auth: {
           registration_mode: 'Self-service registration mode',
-          default_tenant_mode: 'Default workspace provisioning'
+          default_tenant_mode: 'Default workspace provisioning',
+          complex_password_enabled: 'Require complex password'
         },
         ssrf: {
           whitelist: 'SSRF protection allowlist'
+        },
+        sandbox: {
+          docker_enabled: 'Enable Docker sandbox'
         },
         tenant: {
           max_owned_per_user: 'Max workspaces owned per user',
           self_service_creation_enabled: 'Allow self-service workspace creation',
           default_storage_quota_gb: 'Default storage quota for new workspaces (GB)',
-          auto_create_api_key: 'Automatically create an API key for new workspaces'
+          auto_create_api_key: 'Automatically create an API key for new workspaces',
+          auto_accept_invitation: 'Auto-join invited registered users'
         },
         asynq: {
           core_concurrency: 'Guaranteed core parse concurrency',
@@ -3878,16 +3916,21 @@ export default {
       keyDescriptions: {
         auth: {
           registration_mode: 'Self-service registration mode. self_serve = anyone can register an account; invite_only = public registration is disabled and only Owners/Admins can invite. Takes effect immediately after saving, but use self_serve with care (the public internet will send spam sign-ups).',
-          default_tenant_mode: 'Workspace provisioning after public registration. create_personal creates an Owner workspace; tenantless creates only the account until the user accepts an invitation or creates a workspace. Applies to new users only.'
+          default_tenant_mode: 'Workspace provisioning after public registration. create_personal creates an Owner workspace; tenantless creates only the account until the user accepts an invitation or creates a workspace. Applies to new users only.',
+          complex_password_enabled: 'Whether to require complex passwords. When enabled, passwords must contain uppercase and lowercase letters, numbers, and special characters. Changes take effect immediately and only apply to newly registered users or new password changes/resets. Special characters include {specialChars}'
         },
         ssrf: {
           whitelist: 'SSRF protection allowlist. Accepts entries such as example.com / *.foo.com / 10.0.0.0/8 / 2001:db8::1. Takes effect immediately after saving. The SSRF_WHITELIST_EXTRA environment variable is still maintained by the deployer and is not overridden here.'
+        },
+        sandbox: {
+          docker_enabled: 'Allow the Docker sandbox backend. A local docker.sock is equivalent to root on the host, so this stays off by default. Only a system admin can turn it on; the change takes effect immediately. Enable it only on a private single-node install that mounts the daemon socket or uses a TLS-protected remote tcp:// endpoint.'
         },
         tenant: {
           max_owned_per_user: 'Maximum number of workspaces a non-superuser may own via self-service creation. Read on every workspace creation and takes effect immediately after saving. 0 uses the built-in default of 10; a negative value disables the cap entirely (not recommended on public deployments).',
           self_service_creation_enabled: 'Whether non-superusers may create workspaces themselves. When disabled, regular users can only join existing workspaces by invitation; cross-workspace superusers remain exempt. Takes effect immediately.',
           default_storage_quota_gb: 'Default storage quota (GB) assigned when a new workspace is created, covering vectors, originals, text, indexes, and related data. Read only at creation time — changes apply to newly created workspaces only and do not retroactively update existing workspaces. 0 or a negative value uses the built-in default of 10 GB.',
-          auto_create_api_key: 'Automatically creates a full_access API key for a new workspace and returns its plaintext token in the create response. Use only for integrations that depend on the legacy behavior; it is disabled by default and explicit API-key creation is recommended.'
+          auto_create_api_key: 'Automatically creates a full_access API key for a new workspace and returns its plaintext token in the create response. Use only for integrations that depend on the legacy behavior; it is disabled by default and explicit API-key creation is recommended.',
+          auto_accept_invitation: 'When enabled, inviting a registered user by email adds them as a member immediately instead of waiting for inbox confirmation. When off, the invitee must accept from their inbox. Takes effect immediately.'
         },
         asynq: {
           core_concurrency: 'Guaranteed per-process concurrency for document and manual parsing. Core may also borrow the shared elastic pool. Minimum 1; requires a service restart.',
@@ -3917,7 +3960,8 @@ export default {
         confirmBtn: 'Confirm save',
         cancelBtn: 'Cancel',
         emptyValue: '(empty)',
-        bodyAuthRegistrationMode: 'About to change "{label}" to: {value}\n\nIf switched to self_serve, anyone on the public internet can register an account — please confirm this is intended.'
+        bodyAuthRegistrationMode: 'About to change "{label}" to: {value}\n\nIf switched to self_serve, anyone on the public internet can register an account — please confirm this is intended.',
+        bodySandboxDockerEnabled: 'Once on, workspace admins can point a sandbox at the local Docker daemon. A local docker.sock is equivalent to root on the host. Use this only on a private single-node install that mounts the daemon or uses a TLS-protected remote tcp:// endpoint.'
       },
       listConfirm: {
         ssrf: {
@@ -3977,22 +4021,12 @@ export default {
         emailLabel: 'User email',
         emailPlaceholder: 'Enter the email of the user to reset',
         newPasswordLabel: 'New password',
-        newPasswordPlaceholder: '8-32 characters, including letters and numbers',
+        newPasswordPlaceholder: 'Enter new password',
         confirmPasswordLabel: 'Confirm new password',
         confirmPasswordPlaceholder: 'Enter the new password again',
         confirmBtn: 'Confirm reset',
         success: 'Password reset; the user\'s existing sessions were revoked',
         failed: 'Failed to reset password',
-        validation: {
-          emailRequired: 'Enter the user email',
-          emailInvalid: 'Enter a valid email address',
-          passwordRequired: 'Enter a new password',
-          passwordLength: 'Password must be 8-32 characters',
-          passwordLetter: 'Password must contain a letter',
-          passwordNumber: 'Password must contain a number',
-          confirmRequired: 'Enter the new password again',
-          passwordMismatch: 'The passwords do not match'
-        }
       },
       bulkApply: {
         label: 'Apply to all existing workspaces',
@@ -4203,6 +4237,11 @@ export default {
       dimensionOverrideDesc: 'Enable only if the provider documentation says this model accepts a dimensions parameter.',
       supportsVisionLabel: 'Supports Vision / Multimodal',
       supportsVisionDesc: 'Whether the model accepts image and multimodal input',
+      contextWindowLabel: 'Context Window',
+      contextWindowPlaceholder: 'Default {value}',
+      contextWindowDesc: 'How many tokens this model can take in one request. Agent history compaction uses this limit. Leave empty for the default 200000 (200K). Use the provider’s real window — a larger guess means compaction never fires and the provider rejects the request.',
+      contextWindowDefaultHint: 'Unset, using default {value}',
+      contextWindowTokens: '{count} tokens',
       maxConcurrencyLabel: 'Background concurrency limit',
       maxConcurrencyPlaceholder: '0 = use global default',
       maxConcurrencyDesc: 'Caps concurrent background (ingestion/enrichment) calls to this model, shared per model across all replicas. 0 or empty falls back to the global default; interactive chat is never affected.',
@@ -4276,6 +4315,10 @@ export default {
         openrouter: {
           label: 'OpenRouter',
           description: 'openai/gpt-5.2-chat, google/gemini-3-flash-preview, etc.'
+        },
+        litellm: {
+          label: 'LiteLLM',
+          description: 'Self-hosted proxy to 100+ providers (OpenAI, Anthropic, Gemini, Bedrock, etc.). Replace the placeholder URL; loopback hosts need SSRF_WHITELIST.'
         },
         requesty: {
           label: 'Requesty',
@@ -4464,7 +4507,7 @@ export default {
       title: 'Model Recommendation'
     },
     maxIterations: {
-      desc: 'Maximum reasoning steps when the Agent executes tasks'
+      desc: 'Caps how many reasoning steps one task may take. Unlimited keeps going until the model stops on its own or you stop it.'
     },
     thinkingModel: {
       desc: 'LLM used for Agent reasoning and planning'
@@ -4639,6 +4682,29 @@ export default {
     },
     builtinTag: 'Built-in',
     confirmDelete: 'Delete model "{name}"?',
+    usage: {
+      title: 'Model cannot be deleted',
+      description: 'Model "{name}" is still referenced by the following settings. Open each configuration and choose another model before deleting it.',
+      knowledgeBases: 'Knowledge bases ({count})',
+      agents: 'Agents ({count})',
+      longTermMemory: 'Long-term memory',
+      openConfiguration: 'Open settings',
+      truncated: 'Showing the first {shown} of {total}',
+      bindings: {
+        embedding_model: 'Embedding model',
+        summary_model: 'Summary model',
+        image_processing_model: 'Image processing model',
+        vlm_model: 'Vision model',
+        asr_model: 'Speech recognition model',
+        wiki_synthesis_model: 'Wiki synthesis model',
+        chat_model: 'Chat model',
+        rerank_model: 'Re-ranking model',
+        query_understand_model: 'Query understanding model',
+        follow_up_model: 'Follow-up model',
+        extract_model: 'Memory extraction model',
+        unknown: 'Other model setting'
+      }
+    },
     debug: {
       title: 'Model Test',
       description: 'Send a real request to a saved model and inspect the response',
@@ -5356,7 +5422,8 @@ export default {
       truncated: 'List truncated',
       wrote: 'Wrote',
       edited: 'Edited',
-      replacements: 'Replaced {count}'
+      replacements: 'Replaced {count}',
+      moreLines: '{count} more lines'
     },
     shellExec: {
       workDir: 'Directory',
@@ -5549,7 +5616,7 @@ export default {
       rewriteSystemPrompt: 'System prompt for question rewriting (leave empty for default)',
       rewriteUserPrompt: 'User prompt template for question rewriting (leave empty for default)',
       selectTools: 'Select tools available to the Agent',
-      maxIterations: 'Maximum reasoning steps when the Agent executes tasks',
+      maxIterations: 'Caps how many reasoning steps one task may take. Unlimited keeps going until the model stops on its own or you stop it.',
       kbScope: 'Select the scope of knowledge bases accessible to the agent',
       webSearch: 'When enabled, the agent can search the internet for information',
       webSearchProvider: 'Specify a search engine for this agent. Leave empty to use the default.',
@@ -6429,7 +6496,7 @@ export default {
       currentPlaceholder: 'Enter your current password',
       currentRequired: 'Enter your current password',
       newLabel: 'New password',
-      newPlaceholder: '8-32 characters, include letters and numbers',
+      newPlaceholder: 'Enter new password',
       confirmLabel: 'Confirm new password',
       confirmPlaceholder: 'Enter the new password again',
       submit: 'Update password',
