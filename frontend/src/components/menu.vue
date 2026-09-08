@@ -85,7 +85,7 @@
                         <div class="menu_item-box">
                             <div class="menu_icon">
                                 <img class="icon"
-                                    :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : prefixIcon)"
+                                    :src="getImgSrc(item.icon == 'zhishiku' ? knowledgeIcon : item.icon == 'agent' ? agentIcon : item.icon == 'organization' ? organizationIcon : item.icon == 'logout' ? logoutIcon : item.icon == 'setting' ? settingIcon : item.icon == 'semantic' ? 'semantic.svg' : prefixIcon)"
                                     alt="">
                             </div>
                             <template v-if="!uiStore.sidebarCollapsed">
@@ -147,6 +147,7 @@
                                 <div class="session-list-row session-list-row--flat">
                                     <div class="session-list-row__body">
                                         <SessionSidebarRow :item="subitem" :batch-mode="batchMode"
+                                            :running="Boolean(sessionActivityEntries[subitem.id])"
                                             :active-path="currentSecondpath" :selected-ids="batchSelectedIds"
                                             :menu-options="buildSessionMenuOptions(subitem)"
                                             @navigate="gotopage(subitem.path)"
@@ -246,6 +247,7 @@ import {
 } from './sessionSidebarSourceFilter';
 import { logout as logoutApi } from '@/api/auth';
 import { useMenuStore } from '@/stores/menu';
+import { useSessionActivityStore } from '@/stores/sessionActivity';
 import { useAuthStore } from '@/stores/auth';
 import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
 import { useOrganizationStore } from '@/stores/organization';
@@ -286,6 +288,9 @@ const platformLogo = (p: string): string => (p ? PLATFORM_LOGO[p] || '' : '');
 
 const { t } = useI18n();
 const usemenuStore = useMenuStore();
+const sessionActivity = useSessionActivityStore();
+const { entries: sessionActivityEntries } = storeToRefs(sessionActivity);
+let sessionActivityTimer: ReturnType<typeof setInterval> | undefined;
 const authStore = useAuthStore();
 const deploymentCapabilities = useDeploymentCapabilitiesStore();
 const orgStore = useOrganizationStore();
@@ -411,6 +416,8 @@ const isMenuItemActive = (itemPath: string): boolean => {
             return currentRoute === 'kbCreatChat' || currentRoute === 'globalCreatChat';
         case 'settings':
             return currentRoute === 'settings';
+        case 'semantic':
+            return currentRoute === 'semanticStudio';
         default:
             return itemPath === currentpath.value;
     }
@@ -435,13 +442,13 @@ const getIconActiveState = (itemPath: string) => {
 // 分离上下两部分菜单（使用 visibleMenuArr 以便 lite 模式过滤 logout）
 const topMenuItems = computed<MenuItem[]>(() => {
     return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) =>
-        item.path === 'knowledge-bases' || item.path === 'agents' || item.path === 'organizations' || item.path === 'creatChat'
+        item.path === 'knowledge-bases' || item.path === 'agents' || item.path === 'organizations' || item.path === 'semantic' || item.path === 'creatChat'
     );
 });
 
 const bottomMenuItems = computed<MenuItem[]>(() => {
     return (visibleMenuArr.value as unknown as MenuItem[]).filter((item: MenuItem) => {
-        if (item.path === 'knowledge-bases' || item.path === 'agents' || item.path === 'organizations' || item.path === 'creatChat') {
+        if (item.path === 'knowledge-bases' || item.path === 'agents' || item.path === 'organizations' || item.path === 'semantic' || item.path === 'creatChat') {
             return false;
         }
         return true;
@@ -952,6 +959,7 @@ const loadSessionOriginMeta = async () => {
 const handleSessionMutation = (event: Event) => {
     const detail = (event as CustomEvent<SessionMutationDetail>).detail;
     if (!detail?.sessionId) return;
+    if (detail.removed || detail.messagesCleared) sessionActivity.update(detail.sessionId, false);
     if (detail.patch) {
         updateSessionInBuckets(detail.sessionId, {
             ...detail.patch,
@@ -968,6 +976,7 @@ const handleSessionMutation = (event: Event) => {
 };
 
 onMounted(async () => {
+    sessionActivityTimer = setInterval(() => { void sessionActivity.refresh(); }, 5000);
     const routeName = typeof route.name === 'string' ? route.name : (route.name ? String(route.name) : '')
     currentpath.value = routeName;
     if (route.params.chatid) {
@@ -1000,6 +1009,8 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    clearInterval(sessionActivityTimer);
+    sessionActivity.clear();
     window.removeEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
 });
 
@@ -1663,6 +1674,11 @@ const onDragHandleMouseDown = (e: MouseEvent) => {
             flex: 1 1 auto;
             min-width: 0;
             overflow: hidden;
+        }
+
+        .session-running-indicator {
+            flex: 0 0 16px;
+            flex-shrink: 0;
         }
 
         .submenu_title-text {

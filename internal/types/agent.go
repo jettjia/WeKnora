@@ -106,11 +106,16 @@ type AgentConfig struct {
 	// a negative value is unlimited — the loop runs until the model stops,
 	// the user cancels, or another guard fires. See UnlimitedMaxIterations.
 	MaxIterations  int      `json:"max_iterations"`
-	AllowedTools   []string `json:"allowed_tools"`           // List of allowed tool names
-	Temperature    float64  `json:"temperature"`             // LLM temperature for agent
-	KnowledgeBases []string `json:"knowledge_bases"`         // Accessible knowledge base IDs
-	KnowledgeIDs   []string `json:"knowledge_ids"`           // Accessible knowledge IDs (individual documents)
-	SystemPrompt   string   `json:"system_prompt,omitempty"` // Unified system prompt (uses web_search_status placeholder for dynamic behavior)
+	AllowedTools   []string `json:"allowed_tools"`   // List of allowed tool names
+	Temperature    float64  `json:"temperature"`     // LLM temperature for agent
+	KnowledgeBases []string `json:"knowledge_bases"` // Accessible knowledge base IDs
+	KnowledgeIDs   []string `json:"knowledge_ids"`   // Accessible knowledge IDs (individual documents)
+	// 数据建模 (Cube 语义层) 范围: 编排里圈定本智能体可查询的语义模型。
+	// Mode: "none"(默认, 不注册查询工具) | "all"(全部已发布模型) | "selected"。
+	// 与 AllowedTools 解耦: 工具随编排自动注册, 不占工具勾选位。
+	SemanticModelMode string   `json:"semantic_model_mode,omitempty"`
+	SemanticModels    []string `json:"semantic_models,omitempty"`
+	SystemPrompt      string   `json:"system_prompt,omitempty"` // Unified system prompt (uses web_search_status placeholder for dynamic behavior)
 	// Deprecated: Use SystemPrompt instead. Kept for backward compatibility during migration.
 	SystemPromptWebEnabled  string        `json:"system_prompt_web_enabled,omitempty"`  // Deprecated: Custom prompt when web search is enabled
 	SystemPromptWebDisabled string        `json:"system_prompt_web_disabled,omitempty"` // Deprecated: Custom prompt when web search is disabled
@@ -347,11 +352,14 @@ type Cleanable interface {
 
 // ToolResult represents the result of a tool execution
 type ToolResult struct {
-	Success bool                   `json:"success"`          // Whether the tool executed successfully
-	Output  string                 `json:"output"`           // Human-readable output
-	Data    map[string]interface{} `json:"data,omitempty"`   // Structured data for programmatic use
-	Error   string                 `json:"error,omitempty"`  // Error message if execution failed
-	Images  []string               `json:"images,omitempty"` // Base64 data URIs from tool (e.g. MCP image content)
+	// OutputFiles holds sandbox references for this live result only. History
+	// uses the final answer's persistent resource references instead.
+	OutputFiles []string               `json:"-"`
+	Success     bool                   `json:"success"`          // Whether the tool executed successfully
+	Output      string                 `json:"output"`           // Human-readable output
+	Data        map[string]interface{} `json:"data,omitempty"`   // Structured data for programmatic use
+	Error       string                 `json:"error,omitempty"`  // Error message if execution failed
+	Images      []string               `json:"images,omitempty"` // Base64 data URIs from tool (e.g. MCP image content)
 }
 
 // ToolCall represents a single tool invocation within an agent step

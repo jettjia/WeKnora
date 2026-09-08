@@ -12,6 +12,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.uber.org/dig"
+	"gorm.io/gorm"
 
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/handler"
@@ -88,6 +89,9 @@ type RouterParams struct {
 	WeKnoraCloudHandler          *handler.WeKnoraCloudHandler
 	WikiPageHandler              *handler.WikiPageHandler
 	MemoryHandler                *handler.MemoryHandler
+	// DB backs the self-contained semantic (数据建模) module; dig injects it
+	// from the container like every other dependency.
+	DB *gorm.DB
 }
 
 // NewRouter 创建新的路由
@@ -247,7 +251,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 		// Message-scoped image proxy: shared-agent replies belong to the
 		// caller's session but may reference resources stored in the agent's
 		// source workspace. Authorization is derived from the persisted message,
-		// never from a client-provided workspace ID.
+		// never from a client-provided workspace ID. Replies produced by the
+		// caller's own agent over an org-shared KB fall back to the KB share
+		// relation instead (#3022).
 		serveMessageScopedFiles(
 			v1,
 			rbacGuards,
@@ -257,6 +263,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 			params.FileService,
 			params.StorageBackendResolver,
 			params.ResourceCatalog,
+			params.KBShareService,
+			params.KBService,
+			params.KnowledgeService,
 		)
 		RegisterKnowledgeTagRoutes(v1, params.TagHandler, rbacGuards)
 		RegisterKnowledgeRoutes(v1, params.KnowledgeHandler, rbacGuards)
@@ -288,6 +297,8 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterWeKnoraCloudRoutes(v1, params.WeKnoraCloudHandler, rbacGuards)
 		RegisterWikiPageRoutes(v1, params.WikiPageHandler, rbacGuards)
 		RegisterMemoryRoutes(v1, params.MemoryHandler, rbacGuards)
+		// 数据建模模块 (CUBE_ENABLE 门控; 关闭时为 no-op)
+		RegisterSemanticRoutes(v1, params.DB, rbacGuards)
 		RegisterChunkerDebugRoutes(v1, rbacGuards)
 
 		// Fail fast if any declared API-key policy points at a route

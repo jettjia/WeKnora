@@ -142,6 +142,11 @@ type CustomAgentConfig struct {
 	LLMCallTimeout int `yaml:"llm_call_timeout" json:"llm_call_timeout,omitempty"`
 	// Allowed tools (only for agent type)
 	AllowedTools []string `yaml:"allowed_tools" json:"allowed_tools"`
+	// 数据建模 (Cube 语义层) 范围: 编排里圈定本智能体可查询的语义模型。
+	// Mode: ""/"none" 不启用 | "all" 全部已发布模型 | "selected" 指定模型。
+	// 查询工具随编排自动注册, 与 AllowedTools 解耦。
+	SemanticModelMode string   `yaml:"semantic_model_mode" json:"semantic_model_mode,omitempty"`
+	SemanticModels    []string `yaml:"semantic_models" json:"semantic_models,omitempty"`
 	// MCP service selection mode: "all" = all enabled MCP services, "selected" = specific services, "none" = no MCP
 	MCPSelectionMode string `yaml:"mcp_selection_mode" json:"mcp_selection_mode"`
 	// Selected MCP service IDs (only used when MCPSelectionMode is "selected")
@@ -151,7 +156,7 @@ type CustomAgentConfig struct {
 	MCPAuthWaitTimeout int `yaml:"mcp_auth_wait_timeout,omitempty" json:"mcp_auth_wait_timeout,omitempty"`
 
 	// ===== Skills Settings (only for smart-reasoning mode) =====
-	// Skills selection mode: "all" = all preloaded skills, "selected" = specific skills, "none" = no skills
+	// Skills selection mode: "all" = all installed skills, "selected" = specific skills, "none" = no skills
 	SkillsSelectionMode string `yaml:"skills_selection_mode" json:"skills_selection_mode"`
 	// Selected skill names (only used when SkillsSelectionMode is "selected")
 	SelectedSkills []string `yaml:"selected_skills" json:"selected_skills"`

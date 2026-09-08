@@ -298,6 +298,8 @@ func (s *sessionService) buildAgentConfig(
 		MemoryEnabled:               customAgent.Config.MemoryEnabled,
 		MCPSelectionMode:            customAgent.Config.MCPSelectionMode,
 		MCPServices:                 customAgent.Config.MCPServices,
+		SemanticModelMode:           customAgent.Config.SemanticModelMode,
+		SemanticModels:              customAgent.Config.SemanticModels,
 		MCPAuthWaitTimeout:          customAgent.Config.MCPAuthWaitTimeout,
 		Thinking:                    customAgent.Config.Thinking,
 		CitationEnabled:             customAgent.Config.CitationEnabled,
@@ -602,8 +604,8 @@ func dedupPreservingOrder(values []string) []string {
 
 // configureSkillsFromAgent turns the agent's skill picker into runtime flags.
 // The skills themselves come from the sandbox image (TenantSkills), not from
-// the deployment's skills/preloaded directory — that host copy is not what
-// execute_skill_script would find inside the sandbox.
+// a host skill directory — that copy is not what shell_exec would find
+// inside the sandbox.
 func (s *sessionService) configureSkillsFromAgent(
 	ctx context.Context,
 	agentConfig *types.AgentConfig,
