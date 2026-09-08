@@ -730,19 +730,29 @@ async function runPreview() {
   padding: 24px 32px;
 }
 
-.section-content .section-header {
+.section {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  padding: 20px 24px;
   margin-bottom: 16px;
 }
 
+.section-content .section-header {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--td-component-stroke);
+}
+
 .section-title {
-  margin: 0 0 6px 0;
+  margin: 0;
   font-size: 20px;
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
 
 .section-desc {
-  margin: 0;
+  margin: 6px 0 0;
   font-size: 14px;
   color: var(--td-text-color-placeholder);
   line-height: 22px;
@@ -751,7 +761,17 @@ async function runPreview() {
 .section-block-header {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+/* 表单项之间增加间距, 不挤在一起 */
+.section :deep(.t-form-item) {
+  margin-bottom: 16px;
+}
+
+.section :deep(.t-form__label) {
+  font-size: 13px;
+  color: var(--td-text-color-secondary);
 }
 
 .groups-hint {
