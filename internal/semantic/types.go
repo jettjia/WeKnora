@@ -8,6 +8,7 @@ package semantic
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,15 @@ import (
 	"github.com/Tencent/WeKnora/internal/semantic/dbinspector"
 	"github.com/Tencent/WeKnora/internal/types"
 )
+
+// ErrConflict marks a business conflict (e.g. slug already exists).
+var ErrConflict = errors.New("conflict")
+
+// ConflictError wraps a user-facing conflict message.
+type ConflictError struct{ Msg string }
+
+func (e *ConflictError) Error() string { return e.Msg }
+func (e *ConflictError) Unwrap() error { return ErrConflict }
 
 // Connection types with guided support (test + schema browsing).
 const (
@@ -125,6 +135,9 @@ type SemanticModel struct {
 	LastError string `json:"last_error" gorm:"type:text"`
 	// AllowedGroups lists data group slugs allowed to query this model.
 	AllowedGroups types.JSON `json:"allowed_groups" gorm:"type:jsonb"`
+	// MemberVisibility maps group slug -> list of visible member names.
+	// Empty/absent entry means all members visible. Stored as JSONB.
+	MemberVisibility types.JSON `json:"member_visibility,omitempty" gorm:"type:jsonb"`
 	// Version increments on every successful publish.
 	Version int `json:"version"`
 	// PublishedAt is when the current version went live.
@@ -158,6 +171,9 @@ type SemanticModelVersion struct {
 	Version       int        `json:"version" gorm:"index:idx_semver_model_version,unique"`
 	YAML          string     `json:"yaml" gorm:"type:text"`
 	AllowedGroups types.JSON `json:"allowed_groups" gorm:"type:jsonb"`
+	// MemberVisibility maps group slug -> list of visible member names.
+	// Empty/absent entry means all members visible. Stored as JSONB.
+	MemberVisibility types.JSON `json:"member_visibility,omitempty" gorm:"type:jsonb"`
 	// Note documents what changed in this version.
 	Note        string    `json:"note" gorm:"type:varchar(255)"`
 	PublishedBy string    `json:"published_by" gorm:"type:varchar(64)"`
@@ -231,6 +247,7 @@ const (
 	AuditModelCreate      = "model.create"
 	AuditModelUpdate      = "model.update"
 	AuditModelDelete      = "model.delete"
+	AuditModelQuery       = "model.query"
 	AuditModelPublish     = "model.publish"
 	AuditModelUnpublish   = "model.unpublish"
 	AuditModelRollback    = "model.rollback"

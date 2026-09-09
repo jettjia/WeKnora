@@ -279,12 +279,17 @@ func (t *CubeQueryTool) Execute(ctx context.Context, args json.RawMessage) (*typ
 		output = hint + "\n\n" + output
 	}
 	logger.Infof(ctx, "[Tool][CubeQuery] returned %d rows", rowCount)
+	sqlNote := ""
+	if len(resp.GeneratedSQL) > 0 {
+		sqlNote = "\n\nGenerated SQL (for reference):\n" + strings.Join(resp.GeneratedSQL, "\n")
+	}
 	return &types.ToolResult{
 		Success: true,
-		Output:  output,
+		Output:  output + sqlNote,
 		Data: map[string]interface{}{
 			"rows":         resp.Data,
 			"row_count":    rowCount,
+			"sql":          resp.GeneratedSQL,
 			"display_type": "cube_query",
 		},
 	}, nil
@@ -385,6 +390,22 @@ func validateBoundModels(bound []string, input *CubeQueryInput) error {
 	}
 	for _, m := range input.Dimensions {
 		if err := check(m); err != nil {
+			return err
+		}
+	}
+	// Also validate filters, time_dimensions, and order keys.
+	for _, f := range input.Filters {
+		if err := check(f.Member); err != nil {
+			return err
+		}
+	}
+	for _, td := range input.TimeDimensions {
+		if err := check(td.Dimension); err != nil {
+			return err
+		}
+	}
+	for key := range input.Order {
+		if err := check(key); err != nil {
 			return err
 		}
 	}

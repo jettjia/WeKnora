@@ -27,6 +27,11 @@
           </div>
           <p class="header-subtitle">{{ t('semantic.info.subtitle') }}</p>
         </div>
+        <t-button v-if="isAdmin" variant="text" theme="default" size="small" class="audit-btn"
+          @click="openAudit">
+          <template #icon><t-icon name="history" size="15px" /></template>
+          {{ t('semantic.audit.title') }}
+        </t-button>
       </div>
 
       <t-alert v-if="connectionsLoaded && !connections.length" theme="info" class="conn-hint">
@@ -55,6 +60,7 @@
             :space-selection="spaceSelection"
             :can-edit="canEdit"
             :can-publish="isAdmin"
+            :current-user-id="authStore.currentUserId"
             :cube-ready="!!info?.cube_ready"
           />
         </div>

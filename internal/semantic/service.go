@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -39,20 +40,25 @@ type Config struct {
 	ModelDir string
 	// DatasourcesFile is where driverFactory reads connection configs.
 	DatasourcesFile string
+	// MaxPreviewRows caps preview/query result rows (CUBE_MAX_PREVIEW_ROWS, default 200).
+	MaxPreviewRows int
+	// PublishTimeout bounds post-publish compile verification (CUBE_PUBLISH_TIMEOUT, default 30s).
+	PublishTimeout time.Duration
+	// HTTPTimeout is the Cube REST client timeout (CUBE_HTTP_TIMEOUT, default 120s).
+	HTTPTimeout time.Duration
+	// AuditLimit caps audit log list results (CUBE_AUDIT_LIMIT, default 100).
+	AuditLimit int
 }
 
 // AdminGroup is granted on every published model and to platform admins'
 // securityContext, keeping operator access independent of data groups.
 const AdminGroup = "admin"
 
-// publishTimeout bounds the post-write compile verification.
-const publishTimeout = 30 * time.Second
-
 // NewEngine builds the module engine (nil client when not configured).
 func NewEngine(cfg Config, db *gorm.DB) (*Engine, error) {
 	e := &Engine{cfg: cfg, repo: NewRepository(db)}
 	if cfg.APIURL != "" && cfg.APISecret != "" {
-		e.client = cubeclient.New(cfg.APIURL, cfg.APISecret)
+		e.client = cubeclient.New(cfg.APIURL, cfg.APISecret, cfg.HTTPTimeout)
 	}
 	var err error
 	if e.deployer, err = NewDeployer(cfg.ModelDir, cfg.DatasourcesFile); err != nil {
@@ -226,7 +232,7 @@ func (e *Engine) CreateConnection(
 		return nil, fmt.Errorf("database type is required")
 	}
 	if _, err := e.repo.FindConnectionByName(ctx, tenant, in.Name); err == nil {
-		return nil, fmt.Errorf("connection slug %s already exists", in.Name)
+		return nil, &ConflictError{Msg: fmt.Sprintf("connection slug %s already exists", in.Name)}
 	} else if !errors.Is(err, ErrNotFound) {
 		return nil, err
 	}
@@ -322,7 +328,7 @@ func (e *Engine) DeleteConnection(ctx context.Context, userID string, tenant uin
 		return err
 	}
 	if n > 0 {
-		return fmt.Errorf("connection is still referenced by %d model(s); delete or re-point those models first", n)
+		return &ConflictError{Msg: fmt.Sprintf("connection is still referenced by %d model(s); delete or re-point those models first", n)}
 	}
 	if err := e.repo.DeleteConnection(ctx, conn); err != nil {
 		return err
@@ -482,6 +488,21 @@ func (e *Engine) DraftCube(ctx context.Context, tenant uint64, id, schema, table
 	if err != nil {
 		return "", err
 	}
+	// Validate the table exists in the browsed schema before generating SQL.
+	tables, err := e.ListTables(ctx, tenant, id)
+	if err != nil {
+		return "", err
+	}
+	found := false
+	for _, tb := range tables {
+		if tb.Schema == schema && tb.Name == table {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", fmt.Errorf("table %s.%s not found in the connected database", schema, table)
+	}
 	cols, err := e.ListColumns(ctx, tenant, id, schema, table)
 	if err != nil {
 		return "", err
@@ -497,13 +518,15 @@ func (e *Engine) DraftCube(ctx context.Context, tenant uint64, id, schema, table
 
 // SaveModelInput carries editable fields; DraftYAML is the canonical body.
 type SaveModelInput struct {
-	Name          string   `json:"name"`
-	Title         string   `json:"title"`
-	Description   string   `json:"description"`
-	ConnectionID  string   `json:"connection_id"`
-	Kind          string   `json:"kind"`
-	DraftYAML     string   `json:"draft_yaml"`
-	AllowedGroups []string `json:"allowed_groups"`
+	Name             string   `json:"name"`
+	Title            string   `json:"title"`
+	Description      string   `json:"description"`
+	ConnectionID     string   `json:"connection_id"`
+	Kind             string   `json:"kind"`
+	DraftYAML        string   `json:"draft_yaml"`
+	AllowedGroups    []string `json:"allowed_groups"`
+	MemberVisibility string   `json:"member_visibility,omitempty"`
+	ExpectedVersion  int      `json:"expected_version,omitempty"`
 }
 
 // validateModelYAML parses + validates a draft against published model names.
@@ -543,6 +566,7 @@ func (e *Engine) CreateModel(
 		ConnectionID: in.ConnectionID, Kind: in.Kind,
 		DraftYAML: in.DraftYAML, Status: ModelStatusDraft,
 		AllowedGroups: StringListJSON(in.AllowedGroups), CreatedBy: userID,
+		MemberVisibility: types.JSON(in.MemberVisibility),
 	}
 	if m.Kind == "" {
 		m.Kind = ModelKindCube
@@ -566,13 +590,26 @@ func (e *Engine) UpdateModel(
 	if err != nil {
 		return nil, err
 	}
+	// Optimistic locking: detect concurrent edits. The frontend sends the
+	// version it loaded; if another user saved in between, the version
+	// won't match and we return a conflict.
+	if in.ExpectedVersion > 0 && m.Version != in.ExpectedVersion {
+		return nil, &ConflictError{Msg: fmt.Sprintf(
+			"model was modified by another user (current version: %d, expected: %d); please reload and retry",
+			m.Version, in.ExpectedVersion,
+		)}
+	}
+	// If DraftYAML is empty, keep the existing draft (metadata-only update).
+	if in.DraftYAML == "" {
+		in.DraftYAML = m.DraftYAML
+	}
 	doc, err := e.validateModelYAML(ctx, in.DraftYAML, m.Name)
 	if err != nil {
 		return nil, err
 	}
 	_, name, _ := doc.Identity()
 	if name != m.Name && m.Status == ModelStatusPublished {
-		return nil, fmt.Errorf("model name cannot change while published; unpublish first")
+		return nil, &ConflictError{Msg: "model name cannot change while published; unpublish first"}
 	}
 	m.Name = name
 	if in.Title != "" {
@@ -591,8 +628,12 @@ func (e *Engine) UpdateModel(
 		m.Kind = in.Kind
 	}
 	m.DraftYAML = in.DraftYAML
+	m.Version++
 	if in.AllowedGroups != nil {
 		m.AllowedGroups = StringListJSON(in.AllowedGroups)
+	}
+	if in.MemberVisibility != "" {
+		m.MemberVisibility = types.JSON(in.MemberVisibility)
 	}
 	if err := e.repo.SaveModel(ctx, m); err != nil {
 		return nil, err
@@ -607,8 +648,11 @@ func (e *Engine) DeleteModel(ctx context.Context, userID string, tenant uint64, 
 	if err != nil {
 		return err
 	}
+	if !e.canManageModel(ctx, m, userID) {
+		return &ConflictError{Msg: "only the creator or an admin can delete this model"}
+	}
 	if m.Status == ModelStatusPublished {
-		if err := e.deployer.UnpublishModel(m.Name); err != nil {
+		if err := e.deployer.UnpublishModel(m.TenantID, m.Name); err != nil {
 			return fmt.Errorf("failed to remove published file: %w", err)
 		}
 	}
@@ -646,6 +690,8 @@ func (e *Engine) Publish(
 	id string,
 	note string,
 ) (*PublishResult, error) {
+	publishMu.Lock()
+	defer publishMu.Unlock()
 	m, err := e.repo.FindModel(ctx, tenant, id)
 	if err != nil {
 		return nil, err
@@ -672,15 +718,32 @@ func (e *Engine) Publish(
 		e.markPublishFailed(ctx, m, err.Error())
 		return nil, err
 	}
-	// keep the stored accessPolicy in sync with the group selection
+	// Force-override data_source with the bound connection slug.
+	// Prevents a contributor from writing another tenant's connection slug
+	// in YAML to query cross-tenant databases.
+	boundConn, err := e.repo.FindConnection(ctx, tenant, m.ConnectionID)
+	if err != nil {
+		return nil, fmt.Errorf("bound data source not found: %w", err)
+	}
 	kind, name, idErr := doc.Identity()
 	if idErr != nil {
 		return nil, idErr
 	}
-	if kind == ModelKindCube {
-		doc.Cubes[0].AccessPolicy = BuildPolicy(StringList(m.AllowedGroups))
+	switch kind {
+	case ModelKindCube:
+		// Force data_source to the bound connection slug.
+		doc.Cubes[0].DataSource = boundConn.Name
+		// Force-inject access_policy with member-level visibility if configured.
+		groups := StringList(m.AllowedGroups)
+		vis := parseMemberVisibility(m.MemberVisibility)
+		doc.Cubes[0].AccessPolicy = BuildPolicyWithVisibility(vis, groups)
+	case ModelKindView:
+		// Views also get forced access_policy (Cube member-level rules
+		// on the underlying cube do NOT cascade to views).
+		if len(doc.Views) > 0 {
+			doc.Views[0].Extra = setViewPolicy(doc.Views[0].Extra, BuildPolicy(StringList(m.AllowedGroups)))
+		}
 	}
-	// views keep their own policy via YAML source mode
 	yamlText, err := GenerateModelYAML(doc)
 	if err != nil {
 		return nil, err
@@ -688,18 +751,33 @@ func (e *Engine) Publish(
 	if err := e.syncDatasources(ctx); err != nil {
 		return nil, fmt.Errorf("failed to sync datasources.yaml: %w", err)
 	}
-	if err := e.deployer.PublishModel(name, yamlText); err != nil {
+	if err := e.deployer.PublishModel(m.TenantID, name, yamlText); err != nil {
 		e.markPublishFailed(ctx, m, err.Error())
 		return nil, err
 	}
-	pubCtx, cancel := context.WithTimeout(ctx, publishTimeout)
+	pubCtx, cancel := context.WithTimeout(ctx, e.cfg.PublishTimeout)
 	defer cancel()
 	if e.client == nil {
 		e.markPublishFailed(ctx, m, "cube client not configured")
 		return nil, fmt.Errorf("cube client not configured (CUBE_API_URL / CUBEJS_API_SECRET)")
 	}
-	if err := e.client.WaitUntilCompiled(pubCtx, name, publishTimeout); err != nil {
-		_ = e.deployer.UnpublishModel(name) // self-heal: do not serve a broken schema
+	// Wait for the model to appear in /v1/meta. Additionally verify that the
+	// measure count matches the new definition (catches stale schema from a
+	// failed re-publish of an existing model).
+	expectedMeasures := 0
+	if len(doc.Cubes) > 0 {
+		expectedMeasures = len(doc.Cubes[0].Measures)
+	}
+	verifyFn := func(meta *cubeclient.MetaResponse) bool {
+		for _, cb := range meta.Cubes {
+			if cb.Name == name {
+				return len(cb.Measures) == expectedMeasures
+			}
+		}
+		return false
+	}
+	if err := e.client.WaitUntilCompiledVerify(pubCtx, name, verifyFn, e.cfg.PublishTimeout); err != nil {
+		_ = e.deployer.UnpublishModel(m.TenantID, name) // self-heal: do not serve a broken schema
 		e.markPublishFailed(ctx, m, err.Error())
 		return nil, err
 	}
@@ -715,12 +793,33 @@ func (e *Engine) Publish(
 	}
 	if err := e.repo.SaveModelVersion(ctx, &SemanticModelVersion{
 		TenantID: tenant, ModelID: m.ID, Version: next, YAML: yamlText,
-		AllowedGroups: m.AllowedGroups, Note: note, PublishedBy: userID, PublishedAt: now,
+		AllowedGroups: m.AllowedGroups, MemberVisibility: m.MemberVisibility, Note: note, PublishedBy: userID, PublishedAt: now,
 	}); err != nil {
 		logger.Warnf(ctx, "[semantic] version snapshot failed: %v", err)
 	}
 	e.audit(ctx, tenant, userID, AuditModelPublish, "model:"+m.Name, map[string]interface{}{"version": next})
 	return &PublishResult{Status: m.Status, Version: next}, nil
+}
+
+// canManageModel reports whether the user can perform destructive operations
+// (publish / unpublish / delete / rollback) on a model. The creator always
+// can; tenant admins and system admins can manage anyone's models.
+// Matches the KB OwnedKBOrAdmin pattern.
+func (e *Engine) canManageModel(ctx context.Context, m *SemanticModel, userID string) bool {
+	if m.CreatedBy == userID {
+		return true
+	}
+	// Tenant admins (owner/admin) can manage all models in the tenant.
+	isTenantAdmin, err := e.repo.IsTenantAdmin(ctx, m.TenantID, userID)
+	if err == nil && isTenantAdmin {
+		return true
+	}
+	// System admins can manage models across all tenants.
+	isSysAdmin, err := e.repo.IsSystemAdmin(ctx, userID)
+	if err != nil {
+		return false
+	}
+	return isSysAdmin
 }
 
 func (e *Engine) markPublishFailed(ctx context.Context, m *SemanticModel, msg string) {
@@ -737,7 +836,7 @@ func (e *Engine) Unpublish(ctx context.Context, userID string, tenant uint64, id
 	if err != nil {
 		return err
 	}
-	if err := e.deployer.UnpublishModel(m.Name); err != nil {
+	if err := e.deployer.UnpublishModel(m.TenantID, m.Name); err != nil {
 		return err
 	}
 	m.Status = ModelStatusDraft
@@ -772,8 +871,12 @@ func (e *Engine) Rollback(
 	if v.ModelID != m.ID {
 		return nil, fmt.Errorf("version does not match the model")
 	}
+	if !e.canManageModel(ctx, m, userID) {
+		return nil, &ConflictError{Msg: "only the creator or an admin can roll back this model"}
+	}
 	m.DraftYAML = v.YAML
 	m.AllowedGroups = v.AllowedGroups
+	m.MemberVisibility = v.MemberVisibility
 	if err := e.repo.SaveModel(ctx, m); err != nil {
 		return nil, err
 	}
@@ -964,7 +1067,13 @@ func (e *Engine) Preview(
 	if err != nil {
 		return nil, err
 	}
-	return e.client.Load(uctx, q.toCubeQuery(200))
+	resp, err := e.client.Load(uctx, q.toCubeQuery(e.cfg.MaxPreviewRows))
+	if err != nil {
+		return nil, err
+	}
+	e.audit(ctx, tenant, userID, AuditModelQuery, "model:"+m.Name,
+		map[string]interface{}{"rows": len(resp.Data), "measures": q.Measures, "dimensions": q.Dimensions})
+	return resp, nil
 }
 
 // QueryForUser executes a Cube query under the caller's identity (agent tools).
@@ -978,7 +1087,17 @@ func (e *Engine) QueryForUser(
 	if err != nil {
 		return nil, err
 	}
-	return e.client.Load(uctx, q.toCubeQuery(200))
+	resp, err := e.client.Load(uctx, q.toCubeQuery(e.cfg.MaxPreviewRows))
+	if err != nil {
+		return nil, err
+	}
+	e.audit(ctx, tenantID, userID, AuditModelQuery, "model:query",
+		map[string]interface{}{"rows": len(resp.Data), "measures": q.Measures, "dimensions": q.Dimensions})
+	// Attach the generated SQL for transparency (dry-run, no extra DB cost).
+	if sqlResp, sqlErr := e.client.SQL(uctx, q.toCubeQuery(e.cfg.MaxPreviewRows)); sqlErr == nil && len(sqlResp.SQL) > 0 { //nolint:lll // long but readable
+		resp.GeneratedSQL = sqlResp.SQL
+	}
+	return resp, nil
 }
 
 // SQLForUser dry-runs a query under the caller's identity (agent tools).
@@ -992,7 +1111,7 @@ func (e *Engine) SQLForUser(
 	if err != nil {
 		return nil, err
 	}
-	return e.client.SQL(uctx, q.toCubeQuery(200))
+	return e.client.SQL(uctx, q.toCubeQuery(e.cfg.MaxPreviewRows))
 }
 
 // ---- data groups ----
@@ -1135,4 +1254,48 @@ func WarnDenied(meta *cubeclient.MetaResponse, q *PreviewQuery) string {
 		}
 	}
 	return ""
+}
+
+// parseMemberVisibility decodes the MemberVisibility JSONB field into a
+// MemberVisibility map. Returns empty map on parse failure.
+func parseMemberVisibility(raw types.JSON) MemberVisibility {
+	if len(raw) == 0 {
+		return MemberVisibility{}
+	}
+	var vis MemberVisibility
+	if err := json.Unmarshal(raw, &vis); err != nil {
+		return MemberVisibility{}
+	}
+	return vis
+}
+
+// setViewPolicy injects or replaces the access_policy in a view's Extra map.
+func setViewPolicy(
+	extra map[string]interface{},
+	rules []PolicyRule,
+) map[string]interface{} {
+	if extra == nil {
+		extra = map[string]interface{}{}
+	}
+	extra["access_policy"] = rules
+	return extra
+}
+
+// publishMu serializes publishes to prevent concurrent publishes from
+// corrupting each other (e.g. A publishes while B writes a broken model,
+// causing the whole schema to fail compilation and A to be falsely marked failed).
+var publishMu sync.Mutex
+
+// canManageModel reports whether the user can perform destructive operations
+// (publish / unpublish / delete / rollback) on a model. The creator always
+// can; admins can manage anyone's models. Matches the KB OwnedKBOrAdmin pattern.
+func canManageModel(model *SemanticModel, userID string, isAdmin bool) bool {
+	return model.CreatedBy == userID || isAdmin
+}
+
+// canEditModel reports whether the user can modify a model's draft.
+// Contributors can edit any model (same as upstream KB edit-on-create pattern
+// for draft collaboration), but destructive ops require canManageModel.
+func canEditModel(_ *SemanticModel, _ string, _ bool) bool {
+	return true // any contributor can edit drafts; per-model ownership checked at delete/publish
 }

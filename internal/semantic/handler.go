@@ -1,10 +1,12 @@
 package semantic
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -64,6 +66,23 @@ func (h *Handler) tenantOf(c *gin.Context) (uint64, string, bool) {
 	userID, _ := c.Get(types.UserIDContextKey.String())
 	uid, _ := userID.(string)
 	return tenantID, uid, true
+}
+
+// respondError maps engine errors to appropriate HTTP status codes.
+// ErrNotFound → 404; everything else → 500 with a generic message
+// (the original error is logged server-side only, preventing internal
+// details like hosts, usernames, or SQL fragments from reaching the client).
+func (h *Handler) respondError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": "resource not found"})
+	case errors.Is(err, ErrConflict):
+		// ConflictError 的具体消息是业务可读的，安全透出
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	default:
+		logger.Errorf(c.Request.Context(), "[semantic] internal error: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	}
 }
 
 func unauthorized(c *gin.Context) {
@@ -154,7 +173,7 @@ func (h *Handler) CreateConnection(c *gin.Context) {
 	}
 	conn, err := h.engine.CreateConnection(c.Request.Context(), uid, tenant, &in)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, newConnectionResponse(conn))
@@ -184,7 +203,7 @@ func (h *Handler) UpdateConnection(c *gin.Context) {
 	}
 	conn, err := h.engine.UpdateConnection(c.Request.Context(), uid, tenant, c.Param("id"), &in)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, newConnectionResponse(conn))
@@ -206,7 +225,7 @@ func (h *Handler) DeleteConnection(c *gin.Context) {
 		return
 	}
 	if err := h.engine.DeleteConnection(c.Request.Context(), uid, tenant, c.Param("id")); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -251,7 +270,7 @@ func (h *Handler) TestConnectionDraftByID(c *gin.Context) {
 	}
 	result, err := h.engine.TestConnectionDraft(c.Request.Context(), tenant, c.Param("id"), &in)
 	if err != nil && result == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	status := http.StatusOK
@@ -305,7 +324,7 @@ func (h *Handler) ListTables(c *gin.Context) {
 	}
 	tables, err := h.engine.ListTables(c.Request.Context(), tenant, c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"tables": tables})
@@ -329,7 +348,7 @@ func (h *Handler) ListColumns(c *gin.Context) {
 	cols, err := h.engine.ListColumns(c.Request.Context(), tenant, c.Param("id"),
 		c.Query("schema"), c.Query("table"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"columns": cols})
@@ -353,7 +372,7 @@ func (h *Handler) DraftCube(c *gin.Context) {
 	yamlText, err := h.engine.DraftCube(c.Request.Context(), tenant, c.Param("id"),
 		c.Query("schema"), c.Query("table"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"yaml": yamlText})
@@ -427,7 +446,7 @@ func (h *Handler) CreateModel(c *gin.Context) {
 	}
 	m, err := h.engine.CreateModel(c.Request.Context(), uid, tenant, &in)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, m)
@@ -457,7 +476,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	}
 	m, err := h.engine.UpdateModel(c.Request.Context(), uid, tenant, c.Param("id"), &in)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, m)
@@ -479,7 +498,7 @@ func (h *Handler) DeleteModel(c *gin.Context) {
 		return
 	}
 	if err := h.engine.DeleteModel(c.Request.Context(), uid, tenant, c.Param("id")); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -535,7 +554,7 @@ func (h *Handler) UnpublishModel(c *gin.Context) {
 		return
 	}
 	if err := h.engine.Unpublish(c.Request.Context(), uid, tenant, c.Param("id")); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": ModelStatusDraft})
@@ -558,7 +577,7 @@ func (h *Handler) ListVersions(c *gin.Context) {
 	}
 	list, err := h.engine.ListVersions(c.Request.Context(), tenant, c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"versions": list})
@@ -590,7 +609,7 @@ func (h *Handler) RollbackModel(c *gin.Context) {
 	}
 	res, err := h.engine.Rollback(c.Request.Context(), uid, tenant, c.Param("id"), body.VersionID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, res)
@@ -620,7 +639,7 @@ func (h *Handler) PreviewModel(c *gin.Context) {
 	}
 	resp, err := h.engine.Preview(c.Request.Context(), uid, tenant, c.Param("id"), &q)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	meta, _ := h.engine.MetaForUser(c.Request.Context(), tenant, uid)
@@ -644,7 +663,7 @@ func (h *Handler) Meta(c *gin.Context) {
 	}
 	meta, err := h.engine.MetaForUser(c.Request.Context(), tenant, uid)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, meta)
@@ -695,7 +714,7 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 	}
 	created, err := h.engine.CreateGroup(c.Request.Context(), uid, tenant, &g)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, created)
@@ -725,7 +744,7 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 	}
 	g, err := h.engine.UpdateGroup(c.Request.Context(), uid, tenant, c.Param("id"), &in)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, g)
@@ -770,7 +789,7 @@ func (h *Handler) DeleteGroup(c *gin.Context) {
 		return
 	}
 	if err := h.engine.DeleteGroup(c.Request.Context(), uid, tenant, c.Param("id")); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
@@ -801,7 +820,7 @@ func (h *Handler) SetGroupMembers(c *gin.Context) {
 		return
 	}
 	if err := h.engine.SetGroupMembers(c.Request.Context(), uid, tenant, c.Param("id"), body.UserIDs); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"members": len(body.UserIDs)})
@@ -824,7 +843,7 @@ func (h *Handler) ListGroupMembers(c *gin.Context) {
 	}
 	list, err := h.engine.ListGroupMembers(c.Request.Context(), tenant, c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		h.respondError(c, err)
 		return
 	}
 	ids := make([]string, 0, len(list))
@@ -848,7 +867,7 @@ func (h *Handler) ListAudits(c *gin.Context) {
 		unauthorized(c)
 		return
 	}
-	list, err := h.engine.ListAudits(c.Request.Context(), tenant, 100)
+	list, err := h.engine.ListAudits(c.Request.Context(), tenant, h.engine.cfg.AuditLimit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

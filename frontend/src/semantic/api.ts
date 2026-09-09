@@ -64,6 +64,8 @@ export interface SemanticModel {
   status: ModelStatus
   last_error: string
   allowed_groups: string[]
+  expected_version?: number
+  member_visibility?: string
   version: number
   published_at?: string | null
   created_by: string

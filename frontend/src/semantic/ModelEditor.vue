@@ -39,22 +39,25 @@
                       <h3 class="section-title">{{ $t('semantic.model.editor.basic') }}</h3>
                       <p class="section-desc">{{ $t('semantic.agent.modelScopeDesc') }}</p>
                     </div>
-                    <t-form label-width="110px" label-align="right" size="small">
-                      <t-form-item :label="t('semantic.model.name')">
-                        <t-input v-model="form.name" :disabled="!canEdit || isPublished" @change="syncNameToDoc" />
-                      </t-form-item>
-                      <t-form-item :label="t('semantic.model.titleField')">
-                        <t-input v-model="form.title" :disabled="!canEdit" />
-                      </t-form-item>
-                      <t-form-item :label="t('semantic.model.connection')">
-                        <t-select v-model="form.connection_id" :disabled="!canEdit" @change="syncDataSource">
-                          <t-option v-for="c in connections" :key="c.id" :value="c.id" :label="`${c.title || c.name} (${c.type})`" />
-                        </t-select>
-                      </t-form-item>
-                      <t-form-item :label="t('semantic.model.description')">
-                        <t-textarea v-model="form.description" :autosize="{ minRows: 2, maxRows: 4 }" :disabled="!canEdit" />
-                      </t-form-item>
-                    </t-form>
+                    <div class="form-item">
+                      <label class="form-label" :class="{ required: !isPublished }">{{ t('semantic.model.name') }}</label>
+                      <t-input v-model="form.name" :disabled="!canEdit || isPublished" @change="syncNameToDoc" />
+                    </div>
+                    <div class="form-item">
+                      <label class="form-label">{{ t('semantic.model.titleField') }}</label>
+                      <t-input v-model="form.title" :disabled="!canEdit" />
+                    </div>
+                    <div class="form-item">
+                      <label class="form-label required">{{ t('semantic.model.connection') }}</label>
+                      <t-select v-model="form.connection_id" :disabled="!canEdit" @change="syncDataSource">
+                        <t-option v-for="c in connections" :key="c.id" :value="c.id" :label="`${c.title || c.name} (${c.type})`" />
+                      </t-select>
+                    </div>
+                    <div class="form-item">
+                      <label class="form-label">{{ t('semantic.model.description') }}</label>
+                      <t-textarea v-model="form.description" :autosize="{ minRows: 2, maxRows: 4 }" :disabled="!canEdit" />
+                      <p class="form-tip">{{ t('semantic.model.editor.basicDesc') }}</p>
+                    </div>
                   </div>
 
                   <!-- 维度 -->
@@ -156,14 +159,21 @@
                       <h3 class="section-title">{{ $t('semantic.model.editor.groups') }}</h3>
                       <p class="section-desc">{{ $t('semantic.model.editor.groupsDesc') }}</p>
                     </div>
-                    <t-form label-width="110px" label-align="right" size="small">
-                      <t-form-item :label="t('semantic.model.editor.groups')">
-                        <t-select v-model="form.allowed_groups" multiple filterable :disabled="!canEdit" clearable>
-                          <t-option v-for="g in groups" :key="g.id" :value="g.name" :label="g.title || g.name" />
-                        </t-select>
-                      </t-form-item>
-                    </t-form>
-                    <div class="groups-hint">{{ t('semantic.model.editor.groupsHint') }}</div>
+                    <div class="form-item">
+                      <label class="form-label">{{ t('semantic.model.editor.groups') }}</label>
+                      <t-select v-model="form.allowed_groups" multiple filterable :disabled="!canEdit" clearable>
+                        <t-option v-for="g in groups" :key="g.id" :value="g.name" :label="g.title || g.name" />
+                      </t-select>
+                      <p class="form-tip">{{ t('semantic.model.editor.groupsHint') }}</p>
+                    </div>
+                    <!-- 字段级可见性: 勾选组后可为每组指定可见的成员子集 -->
+                    <div v-for="gname in form.allowed_groups" :key="gname" class="member-vis-row">
+                      <label class="form-label" style="font-size:13px">{{ gname }}</label>
+                      <t-select v-model="memberVis[gname]" multiple filterable :disabled="!canEdit"
+                        :placeholder="t('semantic.model.editor.memberVisPh')" size="small" clearable>
+                        <t-option v-for="m in allMemberNames" :key="m" :value="m" :label="m" />
+                      </t-select>
+                    </div>
                   </div>
 
                   <!-- YAML 源码 -->
@@ -214,7 +224,7 @@
                 <div class="footer-actions">
                   <t-button variant="default" @click="emit('update:visible', false)">{{ t('semantic.group.cancel') }}</t-button>
                   <t-button v-if="canEdit" variant="outline" :loading="saving" @click="save">{{ t('semantic.model.editor.save') }}</t-button>
-                  <t-button v-if="canPublish" theme="primary" :loading="publishing" @click="noteVisible = true">{{ t('semantic.model.publish') }}</t-button>
+                  <t-button v-if="canManageThis" theme="primary" :loading="publishing" @click="noteVisible = true">{{ t('semantic.model.publish') }}</t-button>
                 </div>
               </div>
             </div>
@@ -264,6 +274,7 @@ const props = defineProps<{
   groups: DataGroup[]
   canEdit: boolean
   canPublish: boolean
+  currentUserId: string
 }>()
 const emit = defineEmits<{
   (e: 'update:visible', v: boolean): void
@@ -327,6 +338,7 @@ const saveError = ref('')
 const saving = ref(false)
 const publishing = ref(false)
 const noteVisible = ref(false)
+const memberVis = ref<Record<string, string[]>>({})
 const previewMeasures = ref<string[]>([])
 const previewDimensions = ref<string[]>([])
 const previewRows = ref<Record<string, unknown>[]>([])
@@ -335,8 +347,20 @@ const previewing = ref(false)
 const previewHint = ref('')
 const previewRan = ref(false)
 
+const allMemberNames = computed(() => {
+  const names: string[] = []
+  for (const d of dimensionRows.value) {
+    if (d.name) names.push(d.name)
+  }
+  for (const m of measureRows.value) {
+    if (m.name) names.push(m.name)
+  }
+  return names
+})
+
 const isCube = computed(() => model.value?.kind !== 'view')
 const isPublished = computed(() => model.value?.status === 'published')
+const canManageThis = computed(() => props.canPublish || model.value?.created_by === props.currentUserId)
 const statusLabel = computed(() => {
   const s = model.value?.status
   if (s === 'published') return t('semantic.model.statusPublished')
@@ -525,7 +549,9 @@ async function save(): Promise<SemanticModel | null> {
       connection_id: form.value.connection_id,
       kind: model.value!.kind,
       draft_yaml: currentYaml(),
-      allowed_groups: form.value.allowed_groups
+      allowed_groups: form.value.allowed_groups,
+      member_visibility: JSON.stringify(memberVis.value),
+      expected_version: model.value?.version || 0
     })
     model.value = updated
     emit('saved', updated)
@@ -756,6 +782,35 @@ async function runPreview() {
   font-size: 14px;
   color: var(--td-text-color-placeholder);
   line-height: 22px;
+}
+
+.form-item {
+  margin-bottom: 16px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--app-font-family);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+
+  &.required::after {
+    content: '*';
+    color: var(--td-error-color);
+    margin-left: 4px;
+  }
+}
+
+.form-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--td-text-color-placeholder);
 }
 
 .section-block-header {

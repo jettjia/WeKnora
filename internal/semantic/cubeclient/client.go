@@ -35,11 +35,14 @@ type Client struct {
 }
 
 // New builds a client. endpoint example: http://cube:4000/cubejs-api/v1
-func New(endpoint, secret string) *Client {
+func New(endpoint, secret string, timeout time.Duration) *Client {
+	if timeout <= 0 {
+		timeout = 120 * time.Second
+	}
 	return &Client{
 		endpoint: strings.TrimRight(endpoint, "/"),
 		secret:   secret,
-		http:     &http.Client{Timeout: 120 * time.Second},
+		http:     &http.Client{Timeout: timeout},
 	}
 }
 
@@ -175,6 +178,9 @@ type LoadResponse struct {
 	Data       []map[string]interface{} `json:"data"`
 	Annotation json.RawMessage          `json:"annotation,omitempty"`
 	Error      string                   `json:"error,omitempty"`
+	// GeneratedSQL is the SQL that Cube generated for this query
+	// (populated by a follow-up /v1/sql dry-run; not part of /v1/load response).
+	GeneratedSQL []string `json:"generated_sql,omitempty"`
 }
 
 // Load executes a query and returns its rows. The securityContext embedded
@@ -211,27 +217,31 @@ func (c *Client) SQL(ctx context.Context, q Query) (*SQLResponse, error) {
 	return &out, nil
 }
 
-// WaitUntilCompiled polls /v1/meta until modelName appears (publish
-// verification). Dev-mode Cube recompiles on file change within a few
-// seconds; a failed compile never shows up, so the caller gets a timeout
-// with a pointer to the Cube logs.
-func (c *Client) WaitUntilCompiled(ctx context.Context, modelName string, timeout time.Duration) error {
+// Ping verifies endpoint reachability (config self-check).
+func (c *Client) Ping(ctx context.Context) error {
+	_, err := c.Meta(ctx)
+	return err
+}
+
+// WaitUntilCompiledVerify polls /v1/meta until the model appears AND the
+// verify callback returns true. The callback receives each /v1/meta response,
+// allowing the caller to compare fingerprints against the expected NEW
+// definition without making duplicate Meta calls.
+func (c *Client) WaitUntilCompiledVerify(
+	ctx context.Context,
+	modelName string,
+	verify func(meta *MetaResponse) bool,
+	timeout time.Duration,
+) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		meta, err := c.Meta(ctx)
-		if err == nil {
-			for _, cb := range meta.Cubes {
-				if cb.Name == modelName {
-					return nil
-				}
-			}
+		if err == nil && verify(meta) {
+			return nil
 		}
 		if time.Now().After(deadline) {
-			if err != nil {
-				return fmt.Errorf("model compile poll timeout (last error: %v); check Cube logs", err)
-			}
 			return fmt.Errorf("model %s compile poll timeout (%s); "+
-				"the model may have syntax errors, check Cube logs", modelName, timeout)
+				"the model may have failed to update, check Cube logs", modelName, timeout)
 		}
 		select {
 		case <-ctx.Done():
@@ -239,12 +249,6 @@ func (c *Client) WaitUntilCompiled(ctx context.Context, modelName string, timeou
 		case <-time.After(time.Second):
 		}
 	}
-}
-
-// Ping verifies endpoint reachability (config self-check).
-func (c *Client) Ping(ctx context.Context) error {
-	_, err := c.Meta(ctx)
-	return err
 }
 
 // ---- securityContext plumbing through request context ----
