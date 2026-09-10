@@ -1,7 +1,7 @@
 <template>
   <div class="actions-tab">
     <div v-if="modelValue.length" class="card-grid">
-      <div v-for="a in modelValue" :key="a.id" class="kb-style-card action-card" @click="canManage && openEdit(a)">
+      <div v-for="a in modelValue" :key="a.id" class="kb-style-card conn-card" @click="canManage && openEdit(a)">
         <div class="card-header">
           <span class="card-title" :title="a.name">
             <span class="card-title-text">{{ a.title || a.name }}</span>
@@ -17,7 +17,7 @@
                   <t-icon class="menu-icon" name="edit" />
                   <span>{{ t('semantic.action.edit') }}</span>
                 </div>
-                <div v-if="canManage" class="popup-menu-item" @click.stop="confirmDelete(a)">
+                <div v-if="canManage" class="popup-menu-item delete" @click.stop="confirmDelete(a)">
                   <t-icon class="menu-icon" name="delete" />
                   <span>{{ t('semantic.action.delete') }}</span>
                 </div>
@@ -27,17 +27,23 @@
         </div>
 
         <div class="card-content">
-          <div class="card-description">{{ a.description || t('semantic.action.noDescription') }}</div>
-          <div class="card-meta">
-            <t-tag v-for="m in a.object_types" :key="m" size="small" variant="light-outline">{{ m }}</t-tag>
-            <t-tag v-for="g in a.allowed_groups" :key="g" size="small" theme="warning" variant="light-outline">{{ g }}</t-tag>
+          <div class="card-description">
+            {{ a.description || a.object_types.join(' · ') }}
           </div>
         </div>
 
         <div class="card-bottom">
           <div class="bottom-left">
-            <t-tag size="small" theme="success" variant="light-outline" v-if="a.status === 'active'">{{ t('semantic.action.active') }}</t-tag>
-            <t-tag size="small" theme="danger" variant="light-outline" v-else>{{ a.status }}</t-tag>
+            <t-tooltip :content="badgeTooltip(a)" placement="top">
+              <div class="feature-badge type-badge">
+                <t-icon name="layers" size="14px" />
+                <span class="badge-text">{{ a.object_types[0] || 'webhook' }}</span>
+              </div>
+            </t-tooltip>
+            <div class="feature-badge status-badge" :class="a.status">
+              <t-icon :name="a.status === 'active' ? 'check-circle' : 'error-circle'" size="14px" />
+              <span class="badge-text">{{ a.status }}</span>
+            </div>
           </div>
           <div class="bottom-right">
             <span class="card-time">{{ shortTime(a.updated_at) }}</span>
@@ -231,6 +237,13 @@ function shortTime(ts: string): string {
   return ts.slice(0, 16).replace('T', ' ')
 }
 
+// 类型徽章的悬浮提示: 关联模型 + 允许的数据组
+function badgeTooltip(a: SemanticAction): string {
+  const models = a.object_types?.length ? `${t('semantic.action.objectTypes')}: ${a.object_types.join(', ')}` : ''
+  const groups = a.allowed_groups?.length ? `${t('semantic.action.allowedGroups')}: ${a.allowed_groups.join(', ')}` : ''
+  return [models, groups].filter(Boolean).join('\n')
+}
+
 function openCreate() {
   editing.value = null
   nameError.value = ''
@@ -345,77 +358,205 @@ defineExpose({ openCreate })
 </script>
 
 <style scoped>
+/* ---- 卡片: 照抄 ConnectionsTab (数据源) 的卡片语言 ---- */
 .actions-tab .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
-.kb-style-card.action-card {
+
+@media (min-width: 1250px) {
+  .actions-tab .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1600px) {
+  .actions-tab .card-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.kb-style-card {
+  border: 1px solid var(--td-component-stroke);
+  border-radius: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--td-bg-color-container);
+  position: relative;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  padding: 16px 20px;
-  border-radius: 8px;
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-stroke);
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  height: 136px;
+  min-height: 136px;
 }
-.kb-style-card.action-card:hover {
+
+.kb-style-card:hover {
   border-color: var(--td-brand-color);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgba(7, 192, 95, 0.12);
 }
+
+.kb-style-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, rgba(7, 192, 95, 0.08) 0%, transparent 100%);
+  border-radius: 0 12px 0 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.card-header,
+.card-content,
+.card-bottom {
+  position: relative;
+  z-index: 1;
+}
+
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
+
 .card-title {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   overflow: hidden;
 }
+
 .card-title-text {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 22px;
   color: var(--td-text-color-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .card-slug {
-  font-size: 12px;
+  flex-shrink: 0;
+  font-size: 11px;
   color: var(--td-text-color-placeholder);
   font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
 }
+
+.more-wrap {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.more-wrap:hover {
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.more-wrap .more-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .card-content {
   flex: 1;
-  margin-bottom: 12px;
-}
-.card-description {
-  font-size: 13px;
-  color: var(--td-text-color-secondary);
-  line-height: 20px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  min-height: 0;
   margin-bottom: 8px;
+  overflow: hidden;
 }
-.card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+
+.card-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--td-text-color-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
 }
+
 .card-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--td-component-stroke);
 }
+
+.bottom-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.bottom-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .card-time {
   font-size: 12px;
   color: var(--td-text-color-placeholder);
 }
+
+.feature-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  border-radius: 5px;
+  padding: 0 6px;
+  cursor: default;
+  transition: background 0.2s ease;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.feature-badge.type-badge {
+  background: rgba(0, 82, 217, 0.08);
+  color: var(--td-brand-color);
+  max-width: 160px;
+}
+
+.feature-badge.type-badge .badge-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feature-badge.status-badge.active {
+  background: rgba(7, 192, 95, 0.08);
+  color: var(--td-brand-color-active);
+}
+
+.feature-badge.status-badge.error,
+.feature-badge.status-badge.inactive {
+  background: rgba(227, 77, 89, 0.08);
+  color: var(--td-error-color);
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;
