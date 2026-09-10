@@ -273,7 +273,7 @@ function canManageModel(m: SemanticModel) {
 }
 const favoritesCount = computed(() => models.value.filter(m => favoriteIds.value.has(m.id)).length)
 const mineCount = computed(() => models.value.filter(m => m.created_by === authStore.currentUserId).length)
-defineExpose({ openCreate, count, favoritesCount, mineCount })
+defineExpose({ openCreate, count, favoritesCount, mineCount, models })
 
 function statusLabel(s: string) {
   if (s === 'published') return t('semantic.model.statusPublished')

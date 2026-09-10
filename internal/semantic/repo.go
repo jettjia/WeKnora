@@ -283,6 +283,72 @@ func (r *Repository) IsSystemAdmin(ctx context.Context, userID string) (bool, er
 	return admin, err
 }
 
+// ---- actions ----
+
+// ListActions lists the tenant's actions.
+func (r *Repository) ListActions(ctx context.Context, tenantID uint64) ([]*SemanticAction, error) {
+	var out []*SemanticAction
+	err := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID).Order("created_at ASC").Find(&out).Error
+	return out, err
+}
+
+// FindAction retrieves one action by ID.
+func (r *Repository) FindAction(ctx context.Context, tenantID uint64, id string) (*SemanticAction, error) {
+	var a SemanticAction
+	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND id = ?", tenantID, id).First(&a).Error; err != nil {
+		return nil, translateNotFound(err)
+	}
+	return &a, nil
+}
+
+// FindActionByName retrieves one action by slug.
+func (r *Repository) FindActionByName(ctx context.Context, tenantID uint64, name string) (*SemanticAction, error) {
+	var a SemanticAction
+	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND name = ?", tenantID, name).First(&a).Error; err != nil {
+		return nil, translateNotFound(err)
+	}
+	return &a, nil
+}
+
+// SaveAction upserts an action.
+func (r *Repository) SaveAction(ctx context.Context, a *SemanticAction) error {
+	return r.db.WithContext(ctx).Save(a).Error
+}
+
+// DeleteAction soft-deletes an action.
+func (r *Repository) DeleteAction(ctx context.Context, a *SemanticAction) error {
+	return r.db.WithContext(ctx).Delete(a).Error
+}
+
+// ActiveActionsByModels returns active actions whose object_types contain at
+// least one of the given model names. Used by the agent's action_meta tool to
+// list only actions attached to the agent's bound models. Filtering happens
+// in Go (JSONB containment is Postgres-only; this keeps SQLite tests and
+// deployments working — tenant action counts are small).
+func (r *Repository) ActiveActionsByModels(ctx context.Context, tenantID uint64, modelNames []string) ([]*SemanticAction, error) {
+	var out []*SemanticAction
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND status = ?", tenantID, "active").
+		Order("created_at ASC").Find(&out).Error
+	if err != nil || len(modelNames) == 0 {
+		return out, err
+	}
+	bound := make(map[string]bool, len(modelNames))
+	for _, n := range modelNames {
+		bound[n] = true
+	}
+	filtered := out[:0:0]
+	for _, a := range out {
+		for _, m := range StringList(a.ObjectTypes) {
+			if bound[m] {
+				filtered = append(filtered, a)
+				break
+			}
+		}
+	}
+	return filtered, nil
+}
+
 // ---- audit ----
 
 // SaveAudit appends one audit record.

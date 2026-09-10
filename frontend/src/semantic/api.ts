@@ -296,3 +296,69 @@ export interface AuditLogEntry {
 export function listAudits() {
   return get<{ audit_logs: AuditLogEntry[] }>('/api/v1/semantic/audit')
 }
+
+// ---- Actions ----
+
+export interface ActionField {
+  column: string
+  type: string
+  required: boolean
+  description: string
+  enum?: string[]
+  default?: unknown
+}
+
+export interface Precondition {
+  description: string
+  query: unknown
+  expect: string
+}
+
+export interface SemanticAction {
+  id: string
+  tenant_id: number
+  name: string
+  title: string
+  description: string
+  object_types: string[]
+  input_schema: ActionField[]
+  preconditions?: Precondition[]
+  backend: { type: string; url?: string; method?: string; headers?: Record<string, string>; body_template?: string; success_status?: number[] }
+  allowed_groups: string[]
+  status: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ActionInput {
+  name?: string
+  title?: string
+  description?: string
+  object_types?: string[]
+  input_schema?: ActionField[]
+  preconditions?: Precondition[]
+  backend?: { type: string; url?: string; method?: string; headers?: Record<string, string>; body_template?: string; success_status?: number[] }
+  allowed_groups?: string[]
+  secret_value?: string
+}
+
+export function listActions() {
+  return get<{ actions: SemanticAction[] }>('/api/v1/semantic/actions')
+}
+
+export function createAction(data: ActionInput) {
+  return post<SemanticAction>('/api/v1/semantic/actions', data)
+}
+
+export function updateAction(id: string, data: ActionInput) {
+  return put<SemanticAction>(`/api/v1/semantic/actions/${id}`, data)
+}
+
+export function deleteAction(id: string) {
+  return del(`/api/v1/semantic/actions/${id}`)
+}
+
+export function testAction(name: string, args: Record<string, unknown>) {
+  return post<{ success: boolean; output: string; http_status: number }>('/api/v1/semantic/actions/test', { name, args })
+}

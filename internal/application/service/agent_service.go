@@ -1119,7 +1119,7 @@ func (s *agentService) registerTools(
 		}
 	}
 
-	// 数据建模 (Cube 语义层): 工具随智能体编排自动注册, 不走 AllowedTools 勾选。
+	// 数据建模 (Cube 语义层 + Action): 工具随智能体编排自动注册, 不走 AllowedTools 勾选。
 	// 绑定范围 (all=nil 不过滤 / selected=模型名集合) 传入工具, 运行时强制限定;
 	// 数据组权限在此之上仍然生效 (securityContext 按会话用户解析)。
 	if semantic.Default() != nil && config.SemanticModelMode != "" && config.SemanticModelMode != "none" {
@@ -1139,30 +1139,14 @@ func (s *agentService) registerTools(
 			if t := tools.NewCubeSQLTool(bound); t != nil {
 				registry.RegisterTool(t)
 			}
-			logger.Infof(ctx, "[semantic] cube tools registered for agent (mode=%s, models=%d)",
+			if t := tools.NewActionMetaTool(bound); t != nil {
+				registry.RegisterTool(t)
+			}
+			if t := tools.NewActionRunTool(bound); t != nil {
+				registry.RegisterTool(t)
+			}
+			logger.Infof(ctx, "[semantic] cube + action tools registered for agent (mode=%s, models=%d)",
 				config.SemanticModelMode, len(config.SemanticModels))
-		}
-	}
-
-	// Semantic modeling (Cube) tools: registered per agent orchestration config,
-	// not in AllowedTools — decoupled from the tool checkbox list.
-	if semantic.Default() != nil && config.SemanticModelMode != "" && config.SemanticModelMode != "none" {
-		bound := config.SemanticModels
-		if config.SemanticModelMode != "all" {
-			bound = normalizeSemanticModels(config.SemanticModels)
-		} else {
-			bound = nil
-		}
-		if config.SemanticModelMode == "all" || len(bound) > 0 {
-			if t := tools.NewCubeMetaTool(bound); t != nil {
-				registry.RegisterTool(t)
-			}
-			if t := tools.NewCubeQueryTool(bound); t != nil {
-				registry.RegisterTool(t)
-			}
-			if t := tools.NewCubeSQLTool(bound); t != nil {
-				registry.RegisterTool(t)
-			}
 		}
 	}
 

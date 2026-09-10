@@ -255,7 +255,102 @@ const (
 	AuditGroupUpdate      = "group.update"
 	AuditGroupDelete      = "group.delete"
 	AuditGroupMembers     = "group.members"
+	AuditActionCreate     = "action.create"
+	AuditActionUpdate     = "action.update"
+	AuditActionDelete     = "action.delete"
+	AuditActionExecute    = "action.execute"
 )
+
+// ---- Action types ----
+
+// SemanticAction is one declarative operation type attached to Cube models.
+// An action declares its input schema, preconditions, backing function
+// (webhook in v1), and the data groups allowed to run it. The agent tools
+// (action_meta / action_run) discover and execute actions under the caller's
+// identity — the same data-group permission model as Cube queries.
+type SemanticAction struct {
+	ID            string `json:"id" gorm:"type:varchar(36);primaryKey"`
+	TenantID      uint64 `json:"tenant_id" gorm:"index"`
+	// Name is the slug used as the action identifier in agent tools.
+	Name string `json:"name" gorm:"type:varchar(64)"`
+	// Title is the display name.
+	Title string `json:"title" gorm:"type:varchar(255)"`
+	// Description tells the LLM when to use this action and what it does.
+	Description string `json:"description" gorm:"type:text"`
+	// ObjectTypes lists the Cube model names this action is attached to.
+	// Used for agent binding (boundModels filtering) and linking to the
+	// caller's visible models.
+	ObjectTypes types.JSON `json:"object_types" gorm:"type:jsonb"`
+	// InputSchema holds the declared input fields (ActionField list).
+	InputSchema types.JSON `json:"input_schema" gorm:"type:jsonb"`
+	// Preconditions holds declarative Cube-query-based guards evaluated
+	// before the backing runs. Empty = no preconditions.
+	Preconditions types.JSON `json:"preconditions" gorm:"type:jsonb"`
+	// Backend holds the backing configuration: {type:"webhook", config:{...}}.
+	Backend types.JSON `json:"backend" gorm:"type:jsonb"`
+	// AllowedGroups lists data group slugs that may run this action.
+	AllowedGroups types.JSON `json:"allowed_groups" gorm:"type:jsonb"`
+	// Status is active (v1); requires_approval reserved for v2 audit flow.
+	Status    string         `json:"status" gorm:"type:varchar(16);default:'active'"`
+	CreatedBy string         `json:"created_by" gorm:"type:varchar(64)"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+
+	// HasSecret reports whether a webhook auth secret is stored. Computed
+	// on read by redactActionSecret (which also strips the secret from the
+	// backend config); never persisted.
+	HasSecret bool `json:"has_secret" gorm:"-"`
+}
+
+// TableName specifies the table name for SemanticAction.
+func (SemanticAction) TableName() string { return "semantic_actions" }
+
+// BeforeCreate hook to generate UUID.
+func (a *SemanticAction) BeforeCreate(_ *gorm.DB) error {
+	if a.ID == "" {
+		a.ID = uuid.NewString()
+	}
+	return nil
+}
+
+// ActionField is one declared input parameter, mirroring cube-mcp's bizdb
+// Field. The type coercion logic (actionengine.coerce) accepts the same
+// types: string|int|float|bool|date|json.
+type ActionField struct {
+	Column      string   `json:"column"`
+	Type        string   `json:"type"`
+	Required    bool     `json:"required"`
+	Description string   `json:"description"`
+	Enum        []string `json:"enum,omitempty"`
+	Default     any      `json:"default,omitempty"`
+}
+
+// WebhookConfig is the backing configuration for a webhook-type action.
+// SecretEncrypted holds an auth token encrypted with AES-256-GCM (same
+// scheme as CubeConnection.ConfigEncrypted). It is serialized into the
+// stored backend JSON (dispatch needs it), but the service layer redacts
+// the field before any action is returned to API clients.
+type WebhookConfig struct {
+	URL             string              `json:"url"`
+	Method          string              `json:"method"`
+	Headers         map[string]string   `json:"headers,omitempty"`
+	BodyTemplate    string              `json:"body_template,omitempty"`
+	SecretEncrypted string              `json:"secret_encrypted,omitempty"`
+	SuccessStatus   []int               `json:"success_status,omitempty"`
+}
+
+// Precondition is one declarative guard evaluated before the backing runs.
+// The Query is a Cube query (reusing PreviewQuery) whose filters may
+// reference input values via {{input.field_name}} templates. Expect
+// "rows_gt_0" means the precondition holds when the query returns rows;
+// "rows_eq_0" means it holds when the query returns no rows (i.e. the
+// condition must NOT be true for the action to proceed).
+type Precondition struct {
+	Description string       `json:"description"`
+	Query       PreviewQuery  `json:"query"`
+	Expect      string        `json:"expect"` // "rows_gt_0" | "rows_eq_0"
+}
 
 // AuditLog records who did what inside the module (self-contained table,
 // separate from the platform audit log to avoid upstream coupling).

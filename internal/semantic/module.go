@@ -137,6 +137,14 @@ func registerRoutes(g *gin.RouterGroup, h *Handler, viewer, contributor, admin g
 	g.GET("/groups/:id/members", viewer, h.ListGroupMembers)
 	g.GET("/groups/:id/usage", viewer, h.GroupUsage)
 
+	// actions
+	g.POST("/actions", contributor, h.CreateAction)
+	g.GET("/actions", viewer, h.ListActions)
+	g.GET("/actions/:id", viewer, h.GetAction)
+	g.PUT("/actions/:id", contributor, h.UpdateAction)
+	g.DELETE("/actions/:id", admin, h.DeleteAction)
+	g.POST("/actions/test", admin, h.TestAction)
+
 	// audit
 	g.GET("/audit", admin, h.ListAudits)
 
@@ -190,3 +198,7 @@ func CubeSQLForUser(
 	}
 	return e.SQLForUser(ctx, tenantID, userID, q)
 }
+
+// ActionMetaForUser and ActionRunForUser are defined in actionengine.go;
+// they serve as the agent-tool entry points (analogous to the Cube*
+// functions above).
