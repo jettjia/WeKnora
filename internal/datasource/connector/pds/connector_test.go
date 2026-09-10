@@ -1118,3 +1118,114 @@ func TestFetchStream_StaleHandshakeReboots(t *testing.T) {
 		t.Errorf("expected re-bootstrapped cursor \"new-cursor\", got %q", pc.ListDeltaCursor)
 	}
 }
+
+// TestIsTempArtifact: Office owner locks, LibreOffice locks, OS junk and
+// *.tmp blobs are never syncable; real documents always are.
+func TestIsTempArtifact(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		{"~$Q4报表.xlsx", true},
+		{"~$report.docx", true},
+		{".~lock.report.xlsx#", true},
+		{"Thumbs.db", true},
+		{"thumbs.db", true},
+		{"desktop.ini", true},
+		{".DS_Store", true},
+		{"export.tmp", true},
+		{"EXPORT.TMP", true},
+		{"report.xlsx", false},
+		{"报表.xlsx", false},
+		{"~backup.xlsx", false}, // a lone tilde is not an Office lock prefix
+		{"notes.txt", false},
+		{"", false}, // unnamed delta events must stay eligible
+	}
+	for _, tc := range cases {
+		if got := isTempArtifact(tc.name); got != tc.want {
+			t.Errorf("isTempArtifact(%q) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestFetchAll_SkipsTempArtifacts: the bootstrap walk must not ingest the
+// lock/junk files Windows drops next to real documents.
+func TestFetchAll_SkipsTempArtifacts(t *testing.T) {
+	f := newFakePDS(t)
+	f.setFiles("root",
+		pdsFile{FileID: "real", Name: "report.xlsx", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+		pdsFile{FileID: "lock1", Name: "~$report.xlsx", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+		pdsFile{FileID: "lock2", Name: ".~lock.report.xlsx#", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+		pdsFile{FileID: "junk1", Name: "Thumbs.db", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+		pdsFile{FileID: "junk2", Name: "export.tmp", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+	)
+	f.setDownload("real", []byte("real"), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+	c := NewConnector()
+	items, err := c.FetchAll(context.Background(), f.config("d1"), nil)
+	if err != nil {
+		t.Fatalf("FetchAll: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected only the real file, got %d: %s", len(items), describeItems(items))
+	}
+	if _, ok := findItem(items, pdsFileExternalID("d1", "real")); !ok {
+		t.Errorf("real file missing: %s", describeItems(items))
+	}
+}
+
+// TestFetchIncremental_DeltaSkipsTempArtifacts: a lock file appearing in the
+// delta feed is never upserted, but its deletion (user closed Excel) still
+// tombstones so a previously synced lock file gets cleaned up.
+func TestFetchIncremental_DeltaSkipsTempArtifacts(t *testing.T) {
+	f := newFakePDS(t)
+	f.setDelta("saved-cursor", []pdsDeltaItem{
+		{File: pdsFile{FileID: "lock", Name: "~$report.xlsx", Type: "file", UpdatedAt: time.Now()}, Op: "create"},
+		{File: pdsFile{FileID: "gone-lock", Name: "~$old.xlsx", Type: "file"}, Op: "delete"},
+	}, false)
+
+	c := NewConnector()
+	cursor := &types.SyncCursor{
+		ConnectorCursor: map[string]interface{}{
+			"list_delta_cursor": "saved-cursor",
+			"drive_files": map[string]string{
+				"gone-lock": time.Now().Add(-time.Hour).Format(time.RFC3339),
+			},
+		},
+	}
+	items, _, err := c.FetchIncremental(context.Background(), f.config("d1"), cursor)
+	if err != nil {
+		t.Fatalf("FetchIncremental: %v", err)
+	}
+	if it, ok := findItem(items, pdsFileExternalID("d1", "lock")); ok {
+		t.Errorf("lock file must not be upserted (got deleted=%v): %s", it.IsDeleted, describeItems(items))
+	}
+	tombstone, ok := findItem(items, pdsFileExternalID("d1", "gone-lock"))
+	if !ok || !tombstone.IsDeleted {
+		t.Errorf("deletion of a previously synced lock file must still tombstone: %s", describeItems(items))
+	}
+}
+
+// TestListResources_SkipsTempArtifacts: the picker does not offer scratch
+// files, matching what sync would ingest.
+func TestListResources_SkipsTempArtifacts(t *testing.T) {
+	f := newFakePDS(t)
+	f.setFiles("root",
+		pdsFile{FileID: "real", Name: "report.xlsx", Type: "file", ParentID: "root"},
+		pdsFile{FileID: "lock", Name: "~$report.xlsx", Type: "file", ParentID: "root"},
+	)
+
+	c := NewConnector()
+	res, err := c.ListResources(context.Background(), f.config("d1"), "d1:")
+	if err != nil {
+		t.Fatalf("ListResources: %v", err)
+	}
+	for _, r := range res {
+		if r.Name == "~$report.xlsx" {
+			t.Errorf("picker must not list lock file: %s", r.Name)
+		}
+	}
+	if len(res) != 1 || res[0].Name != "report.xlsx" {
+		t.Errorf("expected only report.xlsx, got %v", res)
+	}
+}

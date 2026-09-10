@@ -216,6 +216,11 @@ func (c *Connector) ListResources(
 			return nil, fmt.Errorf("pds list folder %s: %w", parentID, err)
 		}
 		for _, f := range files {
+			// Keep Office/OS scratch files out of the picker too — the
+			// selection must match what sync would actually ingest.
+			if !strings.EqualFold(f.Type, "folder") && isTempArtifact(f.Name) {
+				continue
+			}
 			out = append(out, pdsFileToResource(f, driveID))
 		}
 		if nextMarker == "" {
@@ -573,6 +578,12 @@ func (c *Connector) syncFullDrive(
 	present := make(map[string]string) // fileID -> updatedAt, for deletion diff
 	emitted := 0
 	for _, f := range files {
+		// Skip OS/Office scratch files first: they are never synced, and
+		// excluding them here also drops a previously synced lock file
+		// (pre-filter) from `present`, so the deletion diff cleans it up.
+		if isTempArtifact(f.Name) {
+			continue
+		}
 		if !settings.IsSupportedFile(f.Name) {
 			continue
 		}
@@ -732,6 +743,9 @@ func (c *Connector) syncDeltaDrive(
 					}
 					delete(cursor.DriveFiles, f.FileID)
 				}
+				continue
+			}
+			if isTempArtifact(f.Name) {
 				continue
 			}
 			if !settings.IsSupportedFile(f.Name) {

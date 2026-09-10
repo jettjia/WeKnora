@@ -270,6 +270,28 @@ func (s Settings) IsSupportedFile(name string) bool {
 	return false
 }
 
+// isTempArtifact reports whether name is an OS or Office scratch file that
+// must never be synced. While a document is open, Office writes an owner
+// lock next to it ("~$Q4报表.xlsx"), LibreOffice writes ".~lock.<name>#",
+// Windows/GNOME/macOS drop Thumbs.db / desktop.ini / .DS_Store, and various
+// editors leave "*.tmp" blobs behind. PDS returns all of them from ListFile
+// like any other file, so sync and the resource picker skip them up front.
+// An empty name never matches: delta events without a name cannot be judged
+// and must stay eligible (same reasoning as IsSupportedFile).
+func isTempArtifact(name string) bool {
+	if name == "" {
+		return false
+	}
+	if strings.HasPrefix(name, "~$") || strings.HasPrefix(name, ".~lock.") {
+		return true
+	}
+	switch strings.ToLower(name) {
+	case "thumbs.db", "desktop.ini", ".ds_store":
+		return true
+	}
+	return strings.EqualFold(fileExt(name), ".tmp")
+}
+
 func fileExt(name string) string {
 	if i := strings.LastIndex(name, "."); i >= 0 {
 		return name[i:]
