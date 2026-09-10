@@ -1183,12 +1183,23 @@ func (e *Engine) GetGroupUsage(ctx context.Context, tenant uint64, groupID strin
 	return usage, nil
 }
 
-// DeleteGroup removes a group. Models referencing it keep working with the
-// stale slug until republished — surfaced in the UI via group usage check.
+// DeleteGroup refuses to delete groups still referenced by models, matching
+// DeleteConnection: a dangling slug in a published model's accessPolicy would
+// silently revoke the group's members until the model is republished.
 func (e *Engine) DeleteGroup(ctx context.Context, userID string, tenant uint64, id string) error {
 	g, err := e.repo.FindGroup(ctx, tenant, id)
 	if err != nil {
 		return err
+	}
+	usage, err := e.GetGroupUsage(ctx, tenant, id)
+	if err != nil {
+		return err
+	}
+	if usage.ModelCount > 0 {
+		return &ConflictError{Msg: fmt.Sprintf(
+			"data group is still referenced by %d model(s) (%s); remove it from those models and republish first",
+			usage.ModelCount, strings.Join(usage.ModelNames, ", "),
+		)}
 	}
 	if err := e.repo.DeleteGroup(ctx, g); err != nil {
 		return err
