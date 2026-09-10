@@ -638,7 +638,7 @@ const connectorDefs = computed<ConnectorDef[]>(() => [
     fields: [
       { key: 'access_key_id', labelKey: 'datasource.pds.accessKeyId', placeholder: '', secret: true },
       { key: 'access_key_secret', labelKey: 'datasource.pds.accessKeySecret', placeholder: '', secret: true },
-      { key: 'domain_id', labelKey: 'datasource.pds.domainId', placeholder: '' },
+      { key: 'domain_id', labelKey: 'datasource.pds.domainId', placeholder: '', optional: true },
       { key: 'endpoint', labelKey: 'datasource.field.baseUrl', placeholder: 'https://pds.aliyuncs.com', optional: true },
     ],
   },
