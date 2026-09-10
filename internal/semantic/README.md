@@ -10,13 +10,15 @@ WeKnora 内置的 BI 语义层模块: 配置数据库连接 → 可视化建模 
 WeKnora 前端 (frontend/src/semantic/, 自包含)
    │  /api/v1/semantic/*
 后端 internal/semantic/ (自包含: types/repo/service/handler/deployer
-   │                     + cubeclient + dbinspector)
+   │                     + cubeclient + dbinspector + actionengine)
    ├─ 元数据: semantic_connections / semantic_models / semantic_model_versions
-   │          semantic_data_groups(+members) / semantic_audit_logs (migration 000091)
+   │          semantic_data_groups(+members) / semantic_actions / semantic_audit_logs
    ├─ 发布: 校验 YAML → 原子写 model/auto/*.yaml + datasources.yaml → 轮询编译确认
    ├─ cubeclient: 自签 HS256 JWT (CUBEJS_API_SECRET) → Cube /v1/meta /v1/load /v1/sql
    ├─ dbinspector: mysql/postgres/clickhouse/sqlserver 直连探测 (测试连接/表结构)
+   ├─ actionengine: Action 声明式操作 (入参校验/前置条件/webhook 分发, 见 §操作)
    └─ 智能体工具: cube_meta / cube_query / cube_sql (internal/agent/tools/cube_tools.go)
+                  action_meta / action_run     (internal/agent/tools/action_tools.go)
         ▼
 Cube (cubejs/cube:latest, dev mode 模型热加载)
    └─ driverFactory(datasources.yaml) ──> 业务数据库
@@ -53,9 +55,9 @@ docker compose -f docker-compose.yml -f docker-compose.cube.yml up -d
 
 | 角色 | 能力 |
 | --- | --- |
-| viewer | 查看模型/连接/数据组、预览已发布数据 |
-| contributor | 建模 (草稿增删改、从表生成、发布前编辑) |
-| admin | 全部: 管理数据源、发布/下线/回滚、数据组与成员、审计 |
+| viewer | 查看模型/连接/数据组/操作、预览已发布数据 |
+| contributor | 建模 (草稿增删改、从表生成、发布前编辑)、新建/编辑操作 |
+| admin | 全部: 管理数据源、发布/下线/回滚、数据组与成员、删除操作、审计 |
 
 **数据权限** (数据组 → Cube accessPolicy):
 
@@ -95,15 +97,39 @@ docker compose -f docker-compose.yml -f docker-compose.cube.yml up -d
 `GET/PUT /groups/:id/members`; 审计: `GET /audit`; 健康与元数据:
 `GET /info` `GET /meta`
 
+操作: `POST /actions` (contributor) `GET /actions` `GET/PUT /actions/:id`
+`DELETE /actions/:id` (admin) `POST /actions/test` (admin, 指定身份试跑
+webhook, 跳过前置条件)
+
+## 操作 (Action)
+
+声明式操作类型: 管理员声明"智能体可以做什么" — 入参字段、前置条件、
+webhook backing、允许的数据组。智能体经 `action_meta` 发现、`action_run`
+执行, 全程按会话用户的数据组身份鉴权并落审计。
+
+- **声明与实现分离**: Action 是契约 (做什么/谁能做/何时能做), 实现是
+  webhook — 指向业务系统自己的 API, 写入永远由业务系统完成。
+  **有意不做 SQL 直写**: 直写业务库的能力保留在 cube-mcp 写入引擎
+  (声明式 `writes/*.yaml`, 独立部署独立管控), 不并入本模块
+- **入参**: 字段名/类型/required/enum/default; 请求体留空时自动按
+  字段名组装 JSON body, 特殊结构才手写 Go template
+- **前置条件**: 一组 Cube 查询 + expect (rows_gt_0 / rows_eq_0),
+  filter 值支持 `{{input.field}}` 引用入参; 不满足则拒绝执行
+- **密钥**: 认证 token AES-256-GCM 加密存储, header 值中的
+  `{{secret}}` 占位符执行时替换; 响应永不回显 (has_secret 代替)
+- **审计**: 每次执行记录 who/input/前置条件结果/http_status/响应摘要
+
 ## 智能体集成
 
-CUBE_ENABLE 时, 智能体配置的"工具勾选"列表出现:
+CUBE_ENABLE 时, 智能体编排绑定语义模型后自动注册 (不走工具勾选列表):
 
 - `cube_meta` — 查看当前身份可见的模型与字段 (建模描述即提示词, title/description 质量直接影响字段选择)
 - `cube_query` — 按指标/维度/时间/筛选查数
 - `cube_sql` — 展开 SQL 不执行, 用于核对口径
+- `action_meta` — 查看当前身份可执行的操作及入参/前置条件
+- `action_run` — 执行一个操作 (入参校验 → 前置条件 → webhook → 审计)
 
-典型链路: `cube_meta` 摸字段 → `cube_query` 查数 → `cube_sql` 核对。
+典型链路: `cube_meta` 摸字段 → `cube_query` 查数 → `action_meta` 看能做什么 → `action_run` 执行。
 
 ## 安全边界
 
@@ -112,6 +138,9 @@ CUBE_ENABLE 时, 智能体配置的"工具勾选"列表出现:
 - `datasources.yaml` 含明文密码 (Cube 需要明文建连): 0600 权限写入,
   `deploy/cube/workspace/` 已 gitignore, 注意宿主机目录权限收窄
 - 业务库账号建议只读; 模块查询只走 Cube 只读语义层
+- Action webhook: URL 保存时 + 执行时双重 SSRF 校验 (可用
+  `SSRF_WHITELIST` / `SSRF_WHITELIST_EXTRA` 放行内网目标); secret 加密
+  存储、响应脱敏; 执行全量审计
 
 ## 与上游的关系 / 迁移
 
@@ -128,4 +157,8 @@ CUBE_ENABLE 时, 智能体配置的"工具勾选"列表出现:
 - 多租户共享一个 Cube 实例时模型文件全局生效; v1 面向单组织自部署,
   跨租户隔离 (per-tenant orchestrator 或多实例) 留二期
 - view 类型与预聚合 (pre_aggregations) 通过 YAML 源码模式编辑, 表单暂不覆盖
-- 写库 (原 cube-mcp 写入引擎) 未实现; 拖拽画布编辑器留二期
+- Action 的 SQL 直写 backing **有意不做** (设计决定, 非待办): 本模块的
+  Action 只做治理化分发, webhook 由业务系统接收并自行写库; 直写业务库
+  保留在 cube-mcp 写入引擎。审批流 (requires_approval) 数据模型已预留,
+  留二期
+- 拖拽画布编辑器留二期
