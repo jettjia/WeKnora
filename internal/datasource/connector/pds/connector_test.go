@@ -3,13 +3,11 @@ package pds
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/Tencent/WeKnora/internal/datasource"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -111,18 +109,15 @@ func TestValidate_NoDrives(t *testing.T) {
 	}
 }
 
-// TestValidate_RejectsMissingDomain: parseConfig rejects empty domain_id.
-func TestValidate_RejectsMissingDomain(t *testing.T) {
+// TestValidate_DomainIDOptional: domain_id is metadata-only (no client code
+// path sends it), so a config without it validates fine.
+func TestValidate_DomainIDOptional(t *testing.T) {
 	f := newFakePDS(t)
 	cfg := f.config("")
 	delete(cfg.Credentials, "domain_id")
 	c := NewConnector()
-	err := c.Validate(context.Background(), cfg)
-	if err == nil {
-		t.Fatalf("expected error for missing domain_id")
-	}
-	if !errors.Is(err, datasource.ErrInvalidCredentials) {
-		t.Errorf("expected ErrInvalidCredentials, got %v", err)
+	if err := c.Validate(context.Background(), cfg); err != nil {
+		t.Fatalf("domain_id is optional, Validate should pass: %v", err)
 	}
 }
 

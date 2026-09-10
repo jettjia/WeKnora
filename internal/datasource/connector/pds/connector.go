@@ -82,7 +82,7 @@ func (c *Connector) Validate(ctx context.Context, config *types.DataSourceConfig
 		return fmt.Errorf("pds connection failed: %w", err)
 	}
 	if len(drives) == 0 {
-		logger.Warnf(ctx, "[PDS] Validate: credentials have zero drives for domain %s", cfg.DomainID)
+		logger.Warnf(ctx, "[PDS] Validate: credentials have zero drives (domain_id=%q)", cfg.DomainID)
 	}
 	return nil
 }
@@ -190,10 +190,7 @@ func (c *Connector) ListResources(
 				URL:         d.Description,
 				ModifiedAt:  d.CreatedAt,
 				HasChildren: true,
-				Metadata: map[string]interface{}{
-					"domain_id": cfg.DomainID,
-					"drive_id":  d.DriveID,
-				},
+				Metadata:    driveMetadata(cfg, d.DriveID),
 			})
 		}
 		return out, nil

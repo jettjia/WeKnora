@@ -68,10 +68,11 @@ type Config struct {
 	// on first use.
 	RefreshToken string `json:"refresh_token,omitempty"`
 
-	// DomainID scopes the data source to a single PDS domain (tenant).
-	// For enterprise endpoints the domain is usually derivable from the
-	// endpoint subdomain; we still require it to be explicit so it can be
-	// recorded in sync metadata and log output.
+	// DomainID optionally scopes the data source to a single PDS domain
+	// (tenant). Neither client implementation (token or AK/SK SDK) sends
+	// it in any request — the configured endpoint identifies the
+	// deployment — so it is recorded in drive metadata and logs only,
+	// useful when one endpoint fronts several domains.
 	DomainID string `json:"domain_id,omitempty"`
 }
 
@@ -140,9 +141,10 @@ func parseConfig(config *types.DataSourceConfig) (*Config, error) {
 		cfg.DomainID = os.Getenv(EnvDomainID)
 	}
 
-	if strings.TrimSpace(cfg.DomainID) == "" {
-		return nil, fmt.Errorf("%w: domain_id is required", datasource.ErrInvalidCredentials)
-	}
+	// domain_id stays optional: no client code path consumes it (see the
+	// DomainID field comment), so failing here would block deployments
+	// that do not track domains.
+
 	if !cfg.IsConfigured() {
 		return nil, fmt.Errorf(
 			"%w: one of access_token, refresh_token, or (access_key_id + access_key_secret) is required",
@@ -442,6 +444,17 @@ func splitPDSResourceID(rid string) (string, string) {
 		return rid[:i], rid[i+1:]
 	}
 	return "", rid
+}
+
+// driveMetadata builds the metadata map attached to drive resources.
+// domain_id is only included when configured — it is optional (see
+// Config.DomainID) and no client code path consumes it.
+func driveMetadata(cfg *Config, driveID string) map[string]interface{} {
+	meta := map[string]interface{}{"drive_id": driveID}
+	if cfg.DomainID != "" {
+		meta["domain_id"] = cfg.DomainID
+	}
+	return meta
 }
 
 // MarshalJSON emits created_at as RFC3339, derived from CreatedAt when
