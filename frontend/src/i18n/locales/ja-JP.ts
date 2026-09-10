@@ -469,6 +469,7 @@ export default {
     channelYuque: 'Yuque',
     channelGitLab: 'GitLab',
     channelIma: 'Tencent IMA',
+    channelPDS: 'Alibaba Cloud PDS',
     channelUpload: 'アップロード',
     channelManual: '手動作成',
     channelUrl: 'Web',
@@ -6081,6 +6082,11 @@ export default {
       paths: 'ディレクトリ', pathsPlaceholder: '1行に1つのディレクトリを入力します。空欄の場合はプロジェクト全体を同期します',
       addProject: 'プロジェクトを追加', projectRequired: 'GitLabプロジェクトを1つ以上追加してください',
     },
+    pds: {
+      accessKeyId: 'Access Key ID',
+      accessKeySecret: 'Access Key Secret',
+      domainId: 'Domain ID',
+    },
     resourceHint: '同期するスペースまたはフォルダを選択してください',
     untitled: '無題',
     resourceLoadFailed: 'リソースの読み込みに失敗しました',
@@ -6150,7 +6156,8 @@ export default {
       yuque: 'Yuque',
       rss: 'RSS / Atomフィード',
       ima: 'Tencent IMA',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      pds: 'Alibaba Cloud PDS'
     },
     connectorDesc: {
       feishu: 'Feishu Wikiからドキュメント、スプレッドシート、ファイルを同期します',
@@ -6161,7 +6168,8 @@ export default {
       yuque: 'Yuqueのナレッジベースからドキュメントを同期します',
       rss: 'RSS / Atomフィードから記事を同期します',
       ima: 'Tencent IMAのナレッジベースからドキュメント、ノート、ファイルを同期します（AIセッションと動画の解析は非対応）',
-      gitlab: 'GitLabプロジェクトからファイルを同期します'
+      gitlab: 'GitLabプロジェクトからファイルを同期します',
+      pds: 'Alibaba Cloud PDSドライブからファイルを同期します'
     },
     drive: {
       folderTokenLabel: 'Driveフォルダトークン',
