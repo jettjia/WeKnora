@@ -22,10 +22,12 @@ import (
 
 // fakeCube serves /v1/meta responses for the publish compile-verification
 // poll. The measure count per model is mutable so a test can simulate the
-// schema changing between publishes.
+// schema changing between publishes. loadRows serves /v1/load for
+// precondition-evaluation tests.
 type fakeCube struct {
 	mu       sync.Mutex
 	measures map[string]int
+	loadRows []map[string]interface{}
 	srv      *httptest.Server
 }
 
@@ -33,6 +35,14 @@ func newFakeCube(t *testing.T) *fakeCube {
 	t.Helper()
 	f := &fakeCube{measures: map[string]int{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/load") {
+			f.mu.Lock()
+			rows := f.loadRows
+			f.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": rows})
+			return
+		}
 		if !strings.HasSuffix(r.URL.Path, "/meta") {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -58,6 +68,12 @@ func (f *fakeCube) setMeasures(name string, n int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.measures[name] = n
+}
+
+func (f *fakeCube) setLoadRows(rows []map[string]interface{}) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.loadRows = rows
 }
 
 // newTestEngine builds an Engine over an in-memory sqlite database with a

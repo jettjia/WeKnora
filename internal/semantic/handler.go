@@ -874,3 +874,163 @@ func (h *Handler) ListAudits(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"audit_logs": list})
 }
+
+// ---- actions ----
+
+// CreateAction godoc
+// @Summary Create an action
+// @Description Create a declarative action type attached to Cube models
+// @Tags Semantic
+// @Produce json
+// @Accept json
+// @Param request body object true "Request body"
+// @Success 201 {object} object
+// @Failure 400 {object} map[string]string
+// @Router /semantic/actions [POST]
+func (h *Handler) CreateAction(c *gin.Context) {
+	tenant, uid, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	var in ActionInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	a, err := h.engine.CreateAction(c.Request.Context(), uid, tenant, &in)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, redactActionSecret(a))
+}
+
+// ListActions godoc
+// @Summary List actions
+// @Description List declarative action types
+// @Tags Semantic
+// @Produce json
+// @Success 200 {object} object
+// @Failure 400 {object} map[string]string
+// @Router /semantic/actions [GET]
+func (h *Handler) ListActions(c *gin.Context) {
+	tenant, _, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	list, err := h.engine.ListActions(c.Request.Context(), tenant)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"actions": redactActionsSecrets(list)})
+}
+
+// GetAction godoc
+// @Summary Get an action
+// @Description Get one declarative action type
+// @Tags Semantic
+// @Produce json
+// @Param id path string true "Resource ID"
+// @Success 200 {object} object
+// @Failure 400 {object} map[string]string
+// @Router /semantic/actions/{id} [GET]
+func (h *Handler) GetAction(c *gin.Context) {
+	tenant, _, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	a, err := h.engine.GetAction(c.Request.Context(), tenant, c.Param("id"))
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, redactActionSecret(a))
+}
+
+// UpdateAction godoc
+// @Summary Update an action
+// @Description Update a declarative action type
+// @Tags Semantic
+// @Produce json
+// @Accept json
+// @Param id path string true "Resource ID"
+// @Param request body object true "Request body"
+// @Success 200 {object} object
+// @Failure 400 {object} map[string]string
+// @Router /semantic/actions/{id} [PUT]
+func (h *Handler) UpdateAction(c *gin.Context) {
+	tenant, uid, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	var in ActionInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	a, err := h.engine.UpdateAction(c.Request.Context(), uid, tenant, c.Param("id"), &in)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, redactActionSecret(a))
+}
+
+// DeleteAction godoc
+// @Summary Delete an action
+// @Description Delete a declarative action type
+// @Tags Semantic
+// @Produce json
+// @Param id path string true "Resource ID"
+// @Success 200 {object} object
+// @Failure 400 {object} map[string]string
+// @Router /semantic/actions/{id} [DELETE]
+func (h *Handler) DeleteAction(c *gin.Context) {
+	tenant, uid, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	if err := h.engine.DeleteAction(c.Request.Context(), uid, tenant, c.Param("id")); err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+// TestAction godoc
+// @Summary Test an action's webhook
+// @Description Dry-run an action's webhook backing without preconditions
+// @Tags Semantic
+// @Produce json
+// @Accept json
+// @Param request body object true "Request body"
+// @Success 200 {object} object
+// @Failure 400 {object} map[string]string
+// @Router /semantic/actions/test [POST]
+func (h *Handler) TestAction(c *gin.Context) {
+	tenant, uid, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	var body struct {
+		Name   string                 `json:"name"`
+		Args   map[string]interface{} `json:"args"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	resp, err := ActionRunForUser(c.Request.Context(), tenant, uid, body.Name, body.Args)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}

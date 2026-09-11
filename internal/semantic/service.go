@@ -1242,6 +1242,261 @@ func (e *Engine) ListAudits(ctx context.Context, tenant uint64, limit int) ([]*A
 	return e.repo.ListAudits(ctx, tenant, limit)
 }
 
+// ---- actions ----
+
+// ActionInput is the create/update payload for an action.
+type ActionInput struct {
+	Name           string                 `json:"name"`
+	Title          string                 `json:"title"`
+	Description    string                 `json:"description"`
+	ObjectTypes    []string               `json:"object_types"`
+	InputSchema    []ActionField          `json:"input_schema"`
+	Preconditions  []Precondition         `json:"preconditions,omitempty"`
+	Backend       map[string]interface{} `json:"backend"`
+	AllowedGroups []string               `json:"allowed_groups"`
+	// SecretValue carries the webhook auth token in plaintext (encrypted
+	// server-side before storage). Empty on update = keep stored one.
+	SecretValue string `json:"secret_value,omitempty"`
+}
+
+// CreateAction validates and persists a new action.
+func (e *Engine) CreateAction(
+	ctx context.Context,
+	userID string,
+	tenant uint64,
+	in *ActionInput,
+) (*SemanticAction, error) {
+	if !ValidSlug(in.Name) {
+		return nil, fmt.Errorf("action name must match ^[a-z][a-z0-9_]*$")
+	}
+	if _, err := e.repo.FindActionByName(ctx, tenant, in.Name); err == nil {
+		return nil, &ConflictError{Msg: fmt.Sprintf("action slug %s already exists", in.Name)}
+	} else if !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	if err := e.validateActionInput(ctx, tenant, in); err != nil {
+		return nil, err
+	}
+	backendJSON, err := e.processBackend(in)
+	if err != nil {
+		return nil, err
+	}
+	a := &SemanticAction{
+		TenantID: tenant, Name: in.Name, Title: in.Title, Description: in.Description,
+		ObjectTypes: StringListJSON(in.ObjectTypes),
+		InputSchema: mustJSON(in.InputSchema),
+		Preconditions: mustJSON(in.Preconditions),
+		Backend: backendJSON,
+		AllowedGroups: StringListJSON(in.AllowedGroups),
+		Status: "active", CreatedBy: userID,
+	}
+	if err := e.repo.SaveAction(ctx, a); err != nil {
+		return nil, err
+	}
+	e.audit(ctx, tenant, userID, AuditActionCreate, "action:"+in.Name, nil)
+	return a, nil
+}
+
+// UpdateAction updates an action's metadata and definition.
+func (e *Engine) UpdateAction(
+	ctx context.Context,
+	userID string,
+	tenant uint64,
+	id string,
+	in *ActionInput,
+) (*SemanticAction, error) {
+	a, err := e.repo.FindAction(ctx, tenant, id)
+	if err != nil {
+		return nil, err
+	}
+	if in.Name != "" && in.Name != a.Name {
+		if _, err := e.repo.FindActionByName(ctx, tenant, in.Name); err == nil {
+			return nil, &ConflictError{Msg: fmt.Sprintf("action slug %s already exists", in.Name)}
+		} else if !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+		a.Name = in.Name
+	}
+	if in.Title != "" {
+		a.Title = in.Title
+	}
+	if in.Description != "" {
+		a.Description = in.Description
+	}
+	if in.ObjectTypes != nil {
+		a.ObjectTypes = StringListJSON(in.ObjectTypes)
+	}
+	if in.InputSchema != nil {
+		a.InputSchema = mustJSON(in.InputSchema)
+	}
+	if in.Preconditions != nil {
+		a.Preconditions = mustJSON(in.Preconditions)
+	}
+	if in.Backend != nil {
+		backendJSON, err := e.processBackendUpdate(in, a)
+		if err != nil {
+			return nil, err
+		}
+		a.Backend = backendJSON
+	}
+	if in.AllowedGroups != nil {
+		a.AllowedGroups = StringListJSON(in.AllowedGroups)
+	}
+	if err := e.repo.SaveAction(ctx, a); err != nil {
+		return nil, err
+	}
+	e.audit(ctx, tenant, userID, AuditActionUpdate, "action:"+a.Name, nil)
+	return a, nil
+}
+
+// DeleteAction soft-deletes an action.
+func (e *Engine) DeleteAction(ctx context.Context, userID string, tenant uint64, id string) error {
+	a, err := e.repo.FindAction(ctx, tenant, id)
+	if err != nil {
+		return err
+	}
+	if err := e.repo.DeleteAction(ctx, a); err != nil {
+		return nil
+	}
+	e.audit(ctx, tenant, userID, AuditActionDelete, "action:"+a.Name, nil)
+	return nil
+}
+
+// ListActions returns the tenant's actions.
+func (e *Engine) ListActions(ctx context.Context, tenant uint64) ([]*SemanticAction, error) {
+	return e.repo.ListActions(ctx, tenant)
+}
+
+// GetAction retrieves one action.
+func (e *Engine) GetAction(ctx context.Context, tenant uint64, id string) (*SemanticAction, error) {
+	return e.repo.FindAction(ctx, tenant, id)
+}
+
+// validateActionInput checks referenced models exist and input fields are sane.
+func (e *Engine) validateActionInput(ctx context.Context, tenant uint64, in *ActionInput) error {
+	if len(in.ObjectTypes) > 0 {
+		names, err := e.repo.AllModelNames(ctx, "")
+		if err != nil {
+			return fmt.Errorf("failed to validate object types: %w", err)
+		}
+		for _, modelName := range in.ObjectTypes {
+			if !names[modelName] {
+				return fmt.Errorf("object type %q is not a known Cube model", modelName)
+			}
+		}
+	}
+	if in.Backend == nil {
+		return fmt.Errorf("backend configuration is required")
+	}
+	beType, _ := in.Backend["type"].(string)
+	if beType != "webhook" {
+		return fmt.Errorf("unsupported backend type %q (v1: webhook only)", beType)
+	}
+	for _, f := range in.InputSchema {
+		if f.Column == "" {
+			return fmt.Errorf("field column is required")
+		}
+		if !validFieldType(f.Type) {
+			return fmt.Errorf("field %s has invalid type %s", f.Column, f.Type)
+		}
+	}
+	return nil
+}
+
+// processBackend validates and encrypts the webhook backend for storage.
+func (e *Engine) processBackend(in *ActionInput) (types.JSON, error) {
+	cfg, err := parseWebhookConfig(in.Backend)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateWebhookURL(cfg.URL); err != nil {
+		return nil, err
+	}
+	if in.SecretValue != "" {
+		enc, err := encryptString(in.SecretValue)
+		if err != nil {
+			return nil, err
+		}
+		cfg.SecretEncrypted = enc
+	}
+	return mustJSON(cfg), nil
+}
+
+// processBackendUpdate handles the keep-secret-on-empty pattern: an absent
+// SecretValue preserves the stored encrypted secret across edits.
+func (e *Engine) processBackendUpdate(in *ActionInput, existing *SemanticAction) (types.JSON, error) {
+	var existingCfg WebhookConfig
+	_ = json.Unmarshal(existing.Backend, &existingCfg)
+
+	cfg, err := parseWebhookConfig(in.Backend)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateWebhookURL(cfg.URL); err != nil {
+		return nil, err
+	}
+	if in.SecretValue != "" {
+		enc, err := encryptString(in.SecretValue)
+		if err != nil {
+			return nil, err
+		}
+		cfg.SecretEncrypted = enc
+	} else {
+		cfg.SecretEncrypted = existingCfg.SecretEncrypted
+	}
+	return mustJSON(cfg), nil
+}
+
+// redactActionSecret strips the encrypted webhook secret from the backend
+// config before the action is returned to any API client, setting HasSecret
+// so the UI can show its state. Storage keeps the secret intact.
+func redactActionSecret(a *SemanticAction) *SemanticAction {
+	if a == nil || len(a.Backend) == 0 {
+		return a
+	}
+	var cfg map[string]interface{}
+	if err := json.Unmarshal(a.Backend, &cfg); err != nil {
+		return a
+	}
+	if _, ok := cfg["secret_encrypted"]; ok {
+		delete(cfg, "secret_encrypted")
+		if b, err := json.Marshal(cfg); err == nil {
+			a.Backend = types.JSON(b)
+		}
+		a.HasSecret = true
+	}
+	return a
+}
+
+// redactActionsSecrets applies redactActionSecret to a list.
+func redactActionsSecrets(list []*SemanticAction) []*SemanticAction {
+	for _, a := range list {
+		redactActionSecret(a)
+	}
+	return list
+}
+
+// mustJSON marshals v, returning a JSON null on error (never panics).
+func mustJSON(v interface{}) types.JSON {
+	if v == nil {
+		return types.JSON("null")
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return types.JSON("null")
+	}
+	return types.JSON(b)
+}
+
+// validFieldType reports whether a field type is supported.
+func validFieldType(t string) bool {
+	switch t {
+	case "string", "int", "float", "bool", "date", "json":
+		return true
+	}
+	return false
+}
+
 // WarnDenied inspects an empty load result and returns a hint when the
 // securityContext has no access to the requested members (mirrors the
 // cube-mcp rlsAccessDenied detection: Cube silently returns empty rows).

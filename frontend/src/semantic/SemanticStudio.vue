@@ -93,6 +93,26 @@
         </t-table>
       </t-drawer>
 
+      <!-- 操作类型 (Action) -->
+      <div v-if="spaceSelection === 'all'" class="section-block">
+        <div class="kb-section-header" @click="toggleSection('actions')">
+          <t-icon name="play-circle" size="16px" />
+          <span class="kb-section-title">{{ t('semantic.tabs.actions') }}</span>
+          <span class="kb-section-count">{{ actions.length }}</span>
+          <t-tooltip v-if="isAdmin" :content="t('semantic.action.add')" placement="top">
+            <t-button variant="text" theme="default" size="small" class="section-add-btn"
+              @click.stop="actionsTabRef?.openCreate()">
+              <template #icon><t-icon name="add" size="15px" /></template>
+            </t-button>
+          </t-tooltip>
+          <t-icon class="kb-section-toggle" :name="sections.actions ? 'chevron-down' : 'chevron-right'" size="16px" />
+        </div>
+        <div v-show="sections.actions" class="section-body">
+          <ActionsTab ref="actionsTabRef" v-model="actions" :can-manage="isAdmin"
+            :available-models="modelNames" :groups="groups" />
+        </div>
+      </div>
+
       <!-- 数据组分组 (仅「全部」视图) -->
       <div v-if="spaceSelection === 'all'" class="section-block">
         <div class="kb-section-header" @click="toggleSection('groups')">
@@ -120,21 +140,22 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import {
-  getModuleInfo, listConnections, listGroups, listAudits,
-  type AuditLogEntry, type ConnectionInfo, type DataGroup, type ModuleInfo
+  getModuleInfo, listConnections, listGroups, listAudits, listActions,
+  type AuditLogEntry, type ConnectionInfo, type DataGroup, type ModuleInfo, type SemanticAction
 } from './api'
 import ListSpaceSidebar from '@/components/ListSpaceSidebar.vue'
 import ModelsTab from './ModelsTab.vue'
 import ConnectionsTab from './ConnectionsTab.vue'
 import GroupsTab from './GroupsTab.vue'
+import ActionsTab from './ActionsTab.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 
 // 分组折叠状态 (对齐知识库的分组折叠交互)
-const sections = ref({ models: true, connections: true, groups: false })
+const sections = ref({ models: true, connections: true, groups: false, actions: false })
 
-function toggleSection(key: 'models' | 'connections' | 'groups') {
+function toggleSection(key: 'models' | 'connections' | 'groups' | 'actions') {
   sections.value[key] = !sections.value[key]
 }
 
@@ -142,13 +163,14 @@ const info = ref<ModuleInfo | null>(null)
 const connections = ref<ConnectionInfo[]>([])
 const connectionsLoaded = ref(false)
 const groups = ref<DataGroup[]>([])
+const actions = ref<SemanticAction[]>([])
 
-// 侧栏视图 (作用于模型分组)
 const spaceSelection = ref('all')
 
 const modelsTabRef = ref<InstanceType<typeof ModelsTab> | null>(null)
 const connectionsTabRef = ref<InstanceType<typeof ConnectionsTab> | null>(null)
 const groupsTabRef = ref<InstanceType<typeof GroupsTab> | null>(null)
+const actionsTabRef = ref<InstanceType<typeof ActionsTab> | null>(null)
 
 const isAdmin = computed(() => authStore.hasRole('admin'))
 const canEdit = computed(() => authStore.hasRole('contributor'))
@@ -174,6 +196,8 @@ const favoriteCount = computed(() => modelsTabRef.value?.favoritesCount ?? 0)
 const mineCount = computed(() => modelsTabRef.value?.mineCount ?? 0)
 const recentCount = computed(() => Math.min(modelCount.value, 10))
 
+const modelNames = computed(() => modelsTabRef.value?.models?.map((m: { name: string }) => m.name) || [])
+
 async function loadConnections() {
   try {
     const resp = await listConnections()
@@ -192,6 +216,15 @@ async function reloadGroups() {
   }
 }
 
+async function loadActions() {
+  try {
+    const resp = await listActions()
+    actions.value = resp.actions || []
+  } catch {
+    actions.value = []
+  }
+}
+
 onMounted(async () => {
   try {
     info.value = await getModuleInfo()
@@ -200,6 +233,7 @@ onMounted(async () => {
   }
   loadConnections()
   reloadGroups()
+  loadActions()
 })
 </script>
 
