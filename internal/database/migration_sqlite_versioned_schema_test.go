@@ -34,7 +34,10 @@ var versionedSQLiteColumns = map[string][]string{
 	"mcp_tool_approvals": {"enabled"},                        // 000091
 }
 
-const expectedSQLiteMigrationVersion = 13
+// This branch carries the semantic modeling module's sqlite migrations at
+// 000900/000901 (renumbered out of upstream's low-number range), so the
+// final sqlite migration version is 901 rather than upstream's 13.
+const expectedSQLiteMigrationVersion = 901
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
