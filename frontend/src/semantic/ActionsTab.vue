@@ -13,6 +13,10 @@
             </div>
             <template #content>
               <div class="popup-menu" @click.stop>
+                <div v-if="canManage" class="popup-menu-item" @click.stop="copyJSON(a)">
+                  <t-icon class="menu-icon" name="file-copy" />
+                  <span>{{ t('semantic.action.import.copyJson') }}</span>
+                </div>
                 <div v-if="canManage" class="popup-menu-item" @click.stop="openEdit(a)">
                   <t-icon class="menu-icon" name="edit" />
                   <span>{{ t('semantic.action.edit') }}</span>
@@ -72,6 +76,35 @@
       :confirm-loading="saving"
       @confirm="save"
     >
+      <!--
+        从 JSON 导入: 粘贴动作配置 JSON, 纯前端解析后填回表单。
+        不自动提交; 用户检查后再点保存。跨环境 (开发/测试/生产) 迁移用。
+      -->
+      <section class="setting-drawer__section code-import">
+        <button type="button" class="code-import__toggle" @click="importOpen = !importOpen">
+          <t-icon :name="importOpen ? 'chevron-down' : 'chevron-right'" />
+          <span>{{ t('semantic.action.import.toggle') }}</span>
+        </button>
+        <div v-if="importOpen" class="code-import__body">
+          <p class="form-desc">{{ t('semantic.action.import.hint') }}</p>
+          <p v-if="editing" class="form-desc code-import__warn">
+            {{ t('semantic.action.import.editOverwriteHint') }}
+          </p>
+          <t-textarea
+            v-model="importText"
+            :autosize="{ minRows: 6, maxRows: 14 }"
+            :placeholder="importPlaceholder"
+            class="code-import__textarea"
+          />
+          <p v-if="importError" class="code-import__error">{{ importError }}</p>
+          <div class="code-import__actions">
+            <t-button theme="primary" variant="outline" @click="handleImport">
+              {{ t('semantic.action.import.parse') }}
+            </t-button>
+          </div>
+        </div>
+      </section>
+
       <!-- 基础信息 -->
       <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('semantic.action.sectionBasic') }}</h4>
@@ -179,10 +212,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { createAction, deleteAction, updateAction, type ActionInput, type ActionField, type SemanticAction, type DataGroup } from './api'
+import { createAction, deleteAction, updateAction, type ActionInput, type ActionField, type Precondition, type SemanticAction, type DataGroup } from './api'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 
 const props = defineProps<{
@@ -201,9 +234,9 @@ const editing = ref<SemanticAction | null>(null)
 const saving = ref(false)
 const nameError = ref('')
 
-const form = ref<ActionInput & { input_schema: ActionField[] }>({
+const form = ref<ActionInput & { input_schema: ActionField[]; preconditions: Precondition[] }>({
   name: '', title: '', description: '',
-  object_types: [], input_schema: [],
+  object_types: [], input_schema: [], preconditions: [],
   backend: { type: 'webhook' },
   allowed_groups: [], secret_value: '',
 })
@@ -211,6 +244,172 @@ const webhookUrl = ref('')
 const webhookMethod = ref('POST')
 const webhookBody = ref('')
 const webhookHeaders = ref<{ key: string; value: string }[]>([])
+const webhookSuccessStatus = ref('')
+
+// ---- 从 JSON 导入 (纯前端解析, 照 MCP 服务弹窗的代码导入模式) ----
+const importOpen = ref(false)
+const importText = ref('')
+const importError = ref('')
+
+// 占位示例不走 i18n: vue-i18n 会把大括号当插值编译, 直接用常量。
+const importPlaceholder = `{
+  "name": "create_ticket",
+  "title": "创建工单",
+  "description": "为异常批次创建处理工单",
+  "object_types": ["orders"],
+  "allowed_groups": ["sales"],
+  "input_schema": [
+    { "column": "part_sn", "type": "string", "required": true, "description": "产品 SN" }
+  ],
+  "preconditions": [
+    { "description": "批次存在", "query": { "measures": ["orders.count"], "filters": [{ "member": "orders.batch_no", "operator": "equals", "values": ["{{.batch_no}}"] }] }, "expect": "rows_gt_0" }
+  ],
+  "backend": {
+    "type": "webhook",
+    "url": "https://erp.example.com/api/tickets",
+    "method": "POST",
+    "headers": { "X-Auth": "{{secret}}" },
+    "body_template": "{\\"part_sn\\":\\"{{.part_sn}}\\"}"
+  }
+}`
+
+// 把导入的 JSON 对象映射到表单。宽松取值: 字段缺失保持表单现状, 类型不对的忽略。
+function applyActionJSON(obj: Record<string, unknown>): boolean {
+  if (String(obj.backend?.type ?? 'webhook') !== 'webhook') {
+    importError.value = t('semantic.action.import.errors.unsupportedBackend')
+    return false
+  }
+  const strArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+
+  if (typeof obj.name === 'string' && obj.name) form.value.name = obj.name
+  if (typeof obj.title === 'string') form.value.title = obj.title
+  if (typeof obj.description === 'string') form.value.description = obj.description
+  if (Array.isArray(obj.object_types)) form.value.object_types = strArr(obj.object_types)
+  if (Array.isArray(obj.allowed_groups)) form.value.allowed_groups = strArr(obj.allowed_groups)
+
+  if (Array.isArray(obj.input_schema)) {
+    form.value.input_schema = (obj.input_schema as Record<string, unknown>[])
+      .filter(f => f && typeof f === 'object' && typeof f.column === 'string' && f.column)
+      .map(f => ({
+        column: f.column as string,
+        type: typeof f.type === 'string' && f.type ? f.type : 'string',
+        required: f.required === true,
+        description: typeof f.description === 'string' ? f.description : '',
+        ...(Array.isArray(f.enum) ? { enum: strArr(f.enum) } : {}),
+        ...(f.default !== undefined ? { default: f.default } : {}),
+      }))
+  }
+
+  // 前置条件整段透传 (表单没有编辑区, 但导出/导入必须携带, 否则跨环境丢失)
+  if (Array.isArray(obj.preconditions)) {
+    form.value.preconditions = (obj.preconditions as Record<string, unknown>[])
+      .filter(p => p && typeof p === 'object')
+      .map(p => ({
+        description: typeof p.description === 'string' ? p.description : '',
+        query: p.query ?? {},
+        expect: typeof p.expect === 'string' ? p.expect : 'rows_gt_0',
+      }))
+  }
+
+  const b = (obj.backend ?? {}) as Record<string, unknown>
+  if (typeof b.url === 'string') webhookUrl.value = b.url
+  if (typeof b.method === 'string' && methodOptions.some(m => m.value === b.method.toUpperCase())) {
+    webhookMethod.value = b.method.toUpperCase()
+  }
+  if (typeof b.body_template === 'string') webhookBody.value = b.body_template
+  if (b.success_status === undefined || b.success_status === null || (Array.isArray(b.success_status) && b.success_status.length === 0)) {
+    webhookSuccessStatus.value = ''
+  } else {
+    webhookSuccessStatus.value = JSON.stringify(b.success_status)
+  }
+  if (b.headers && typeof b.headers === 'object' && !Array.isArray(b.headers)) {
+    webhookHeaders.value = Object.entries(b.headers as Record<string, unknown>)
+      .map(([key, value]) => ({ key, value: typeof value === 'string' ? value : String(value ?? '') }))
+  }
+  if (typeof obj.secret_value === 'string' && obj.secret_value) form.value.secret_value = obj.secret_value
+  return true
+}
+
+function handleImport() {
+  importError.value = ''
+  const raw = importText.value.trim()
+  if (!raw) {
+    importError.value = t('semantic.action.import.errors.empty')
+    return
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    importError.value = t('semantic.action.import.errors.invalidJson')
+    return
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    importError.value = t('semantic.action.import.errors.noAction')
+    return
+  }
+  if (!applyActionJSON(parsed as Record<string, unknown>)) return
+  MessagePlugin.success(t('semantic.action.import.toasts.filled') as string)
+}
+
+// ---- 复制 JSON (跨环境迁移: 开发 → 测试 → 生产) ----
+
+// 动作的可迁移配置 = 业务字段 + backend; 服务端状态 (id/租户/时间/密钥) 不导出。
+// webhook 认证令牌从不返回 (响应里只有 {{secret}} 占位符), 复制件可安全传递。
+function actionToExportJSON(a: SemanticAction): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    name: a.name,
+    title: a.title,
+    description: a.description,
+    object_types: a.object_types || [],
+    allowed_groups: a.allowed_groups || [],
+    input_schema: a.input_schema || [],
+  }
+  if (a.preconditions?.length) out.preconditions = a.preconditions
+  const b: Record<string, unknown> = { type: 'webhook' }
+  if (a.backend?.url) b.url = a.backend.url
+  if (a.backend?.method) b.method = a.backend.method
+  if (a.backend?.headers && Object.keys(a.backend.headers).length) b.headers = a.backend.headers
+  if (a.backend?.body_template) b.body_template = a.backend.body_template
+  if (a.backend?.success_status?.length) b.success_status = a.backend.success_status
+  out.backend = b
+  return out
+}
+
+// navigator.clipboard 仅在安全上下文可用; 内网 http 部署走 execCommand 降级。
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* fall through to execCommand */ }
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  let ok = false
+  try { ok = document.execCommand('copy') } catch { ok = false }
+  document.body.removeChild(ta)
+  return ok
+}
+
+async function copyJSON(a: SemanticAction) {
+  const text = JSON.stringify(actionToExportJSON(a), null, 2)
+  const ok = await copyText(text)
+  if (ok) {
+    MessagePlugin.success(t('semantic.action.import.toasts.copied') as string)
+  } else {
+    // 剪贴板彻底不可用时展示出来让用户手动复制
+    DialogPlugin.alert({
+      header: t('semantic.action.import.copyJson'),
+      body: () => h('pre', { style: 'max-height: 320px; overflow: auto; font-size: 12px; white-space: pre-wrap;' }, text),
+    })
+  }
+}
 
 const fieldTypeOptions = [
   { value: 'string', label: 'string' },
@@ -249,7 +448,7 @@ function openCreate() {
   nameError.value = ''
   form.value = {
     name: '', title: '', description: '',
-    object_types: [], input_schema: [],
+    object_types: [], input_schema: [], preconditions: [],
     backend: { type: 'webhook' },
     allowed_groups: [], secret_value: '',
   }
@@ -257,6 +456,10 @@ function openCreate() {
   webhookMethod.value = 'POST'
   webhookBody.value = ''
   webhookHeaders.value = []
+  webhookSuccessStatus.value = ''
+  importOpen.value = false
+  importText.value = ''
+  importError.value = ''
   dialogVisible.value = true
 }
 
@@ -267,6 +470,7 @@ function openEdit(a: SemanticAction) {
     name: a.name, title: a.title, description: a.description,
     object_types: [...(a.object_types || [])],
     input_schema: (a.input_schema || []).map(f => ({ ...f })),
+    preconditions: (a.preconditions || []).map(p => ({ ...p })),
     backend: { ...a.backend, type: 'webhook' },
     allowed_groups: [...(a.allowed_groups || [])],
     secret_value: '',
@@ -275,6 +479,10 @@ function openEdit(a: SemanticAction) {
   webhookMethod.value = a.backend?.method || 'POST'
   webhookBody.value = a.backend?.body_template || ''
   webhookHeaders.value = Object.entries(a.backend?.headers || {}).map(([key, value]) => ({ key, value: String(value) }))
+  webhookSuccessStatus.value = a.backend?.success_status?.length ? JSON.stringify(a.backend.success_status) : ''
+  importOpen.value = false
+  importText.value = ''
+  importError.value = ''
   dialogVisible.value = true
 }
 
@@ -304,17 +512,26 @@ async function save() {
   saving.value = true
   try {
     const headers: Record<string, string> = {}
-    for (const h of webhookHeaders.value) {
-      if (h.key.trim()) headers[h.key.trim()] = h.value
+    for (const h2 of webhookHeaders.value) {
+      if (h2.key.trim()) headers[h2.key.trim()] = h2.value
+    }
+    let successStatus: number[] | undefined
+    if (webhookSuccessStatus.value.trim()) {
+      try {
+        const parsed = JSON.parse(webhookSuccessStatus.value)
+        if (Array.isArray(parsed)) successStatus = parsed.map(Number).filter(n => !Number.isNaN(n))
+      } catch { /* 非法值忽略, 保持默认 */ }
     }
     const payload: ActionInput = {
       ...form.value,
+      preconditions: form.value.preconditions,
       backend: {
         type: 'webhook',
         url: webhookUrl.value,
         method: webhookMethod.value,
         body_template: webhookBody.value,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
+        ...(successStatus?.length ? { success_status: successStatus } : {}),
       },
     }
     let updated: SemanticAction
@@ -618,6 +835,44 @@ defineExpose({ openCreate })
 }
 .menu-icon {
   font-size: 16px;
+}
+/* ---- 从 JSON 导入区: 照抄 MCP 服务弹窗的 code-import 设计 ---- */
+.code-import__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+.code-import__toggle:hover {
+  color: var(--td-brand-color);
+}
+.code-import__body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.code-import__warn {
+  color: var(--td-warning-color);
+}
+.code-import__textarea :deep(textarea) {
+  font-family: var(--td-font-family-mono, monospace);
+  font-size: 12px;
+}
+.code-import__error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--td-error-color);
+}
+.code-import__actions {
+  display: flex;
+  justify-content: flex-end;
 }
 /* ---- 表单样式: 对齐知识库 DataSourceEditorDialog 的 form-item 体系 ---- */
 .form-item {

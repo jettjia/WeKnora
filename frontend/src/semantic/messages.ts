@@ -155,7 +155,24 @@ export const zhCN = {
     selectModels: '选择模型',
     selectModelsDesc: '仅已发布的模型会出现; 运行时查询限定在这些模型内',
     runtimeHintTitle: '数据权限说明',
-    runtimeHint: '会话用户的可见范围仍由数据建模里的数据组决定, 编排范围与数据权限取交集'
+    runtimeHint: '会话用户的可见范围仍由数据建模里的数据组决定, 编排范围与数据权限取交集',
+    import: {
+      toggle: '从 JSON 导入',
+      hint: '粘贴动作配置 JSON, 解析后自动填回表单; 点保存之前不会提交任何内容。',
+      editOverwriteHint: '编辑模式下解析会覆盖下方表单内容。',
+      parse: '解析并填入',
+      copyJson: '复制 JSON',
+      errors: {
+        empty: '请先粘贴 JSON',
+        invalidJson: 'JSON 解析失败, 请检查格式',
+        noAction: '需要单个动作配置对象 (见输入框示例)',
+        unsupportedBackend: '仅支持 webhook 类型的 backend'
+      },
+      toasts: {
+        filled: '已解析并填入表单, 检查后保存',
+        copied: '已复制到剪贴板'
+      }
+    }
   },
   audit: { title: '操作审计', action: '操作', target: '对象', user: '操作人', time: '时间' },
   action: {
@@ -360,7 +377,24 @@ export const enUS = {
     selectModels: 'Select models',
     selectModelsDesc: 'Only published models are listed; queries are restricted to them at runtime',
     runtimeHintTitle: 'Data permissions',
-    runtimeHint: 'What a session user can see is still governed by data groups; the orchestration scope intersects with data permissions'
+    runtimeHint: 'What a session user can see is still governed by data groups; the orchestration scope intersects with data permissions',
+    import: {
+      toggle: 'Import from JSON',
+      hint: 'Paste an action config JSON to auto-fill the form; nothing is submitted until you press save.',
+      editOverwriteHint: 'Parsing in edit mode overwrites the form below.',
+      parse: 'Parse & fill',
+      copyJson: 'Copy JSON',
+      errors: {
+        empty: 'Paste the JSON first',
+        invalidJson: 'Invalid JSON — check the syntax',
+        noAction: 'Expected a single action config object (see the example)',
+        unsupportedBackend: 'Only webhook-type backends are supported'
+      },
+      toasts: {
+        filled: 'Parsed into the form — review and save',
+        copied: 'Copied to clipboard'
+      }
+    }
   },
   audit: { title: 'Audit log', action: 'Action', target: 'Target', user: 'User', time: 'Time' },
   action: {
@@ -567,7 +601,24 @@ export const ruRU = {
     selectModels: 'Выбрать модели',
     selectModelsDesc: 'В списке только опубликованные модели; запросы ограничены ими во время выполнения',
     runtimeHintTitle: 'Права доступа к данным',
-    runtimeHint: 'Видимость для пользователя сессии по-прежнему определяется группами данных; набор моделей пересекается с правами доступа'
+    runtimeHint: 'Видимость для пользователя сессии по-прежнему определяется группами данных; набор моделей пересекается с правами доступа',
+    import: {
+      toggle: 'Импорт из JSON',
+      hint: 'Вставьте JSON конфигурации действия — форма заполнится автоматически; ничего не отправляется, пока вы не нажмёте «Сохранить».',
+      editOverwriteHint: 'В режиме редактирования разбор перезапишет значения формы ниже.',
+      parse: 'Разобрать и заполнить',
+      copyJson: 'Скопировать JSON',
+      errors: {
+        empty: 'Сначала вставьте JSON',
+        invalidJson: 'Некорректный JSON — проверьте синтаксис',
+        noAction: 'Ожидается объект конфигурации одного действия (см. пример)',
+        unsupportedBackend: 'Поддерживается только backend типа webhook'
+      },
+      toasts: {
+        filled: 'Разобрано и заполнено в форму — проверьте и сохраните',
+        copied: 'Скопировано в буфер обмена'
+      }
+    }
   },
   audit: { title: 'Журнал аудита', action: 'Действие', target: 'Объект', user: 'Пользователь', time: 'Время' },
   action: {
@@ -772,7 +823,24 @@ export const jaJP = {
     selectModels: 'モデルを選択',
     selectModelsDesc: '公開済みモデルのみ表示。実行時のクエリはこれらに制限されます',
     runtimeHintTitle: 'データ権限',
-    runtimeHint: 'セッションユーザーの可視範囲はデータグループが最終決定します。編成範囲とデータ権限の積集合が適用されます'
+    runtimeHint: 'セッションユーザーの可視範囲はデータグループが最終決定します。編成範囲とデータ権限の積集合が適用されます',
+    import: {
+      toggle: 'JSON からインポート',
+      hint: 'アクション設定の JSON を貼り付けるとフォームに自動反映されます。保存ボタンを押すまで送信されません。',
+      editOverwriteHint: '編集モードで解析すると、下のフォームの内容が上書きされます。',
+      parse: '解析して反映',
+      copyJson: 'JSON をコピー',
+      errors: {
+        empty: '先に JSON を貼り付けてください',
+        invalidJson: 'JSON の解析に失敗しました。書式を確認してください',
+        noAction: '単一のアクション設定オブジェクトが必要です (入力欄の例を参照)',
+        unsupportedBackend: 'webhook タイプの backend のみ対応しています'
+      },
+      toasts: {
+        filled: 'フォームに反映しました。確認して保存してください',
+        copied: 'クリップボードにコピーしました'
+      }
+    }
   },
   audit: { title: '監査ログ', action: '操作', target: '対象', user: 'ユーザー', time: '日時' },
   action: {
@@ -977,7 +1045,24 @@ export const koKR = {
     selectModels: '모델 선택',
     selectModelsDesc: '게시된 모델만 표시됩니다. 실행 시 조회가 이 모델들로 제한됩니다',
     runtimeHintTitle: '데이터 권한',
-    runtimeHint: '세션 사용자의 가시 범위는 데이터 그룹이 최종 결정합니다. 편성 범위와 데이터 권한의 교집합이 적용됩니다'
+    runtimeHint: '세션 사용자의 가시 범위는 데이터 그룹이 최종 결정합니다. 편성 범위와 데이터 권한의 교집합이 적용됩니다',
+    import: {
+      toggle: 'JSON에서 가져오기',
+      hint: '액션 설정 JSON을 붙여넣으면 폼이 자동으로 채워집니다. 저장 버튼을 누를 때까지 전송되지 않습니다.',
+      editOverwriteHint: '편집 모드에서 파싱하면 아래 폼 내용이 덮어써집니다.',
+      parse: '파싱 후 채우기',
+      copyJson: 'JSON 복사',
+      errors: {
+        empty: '먼저 JSON을 붙여넣으세요',
+        invalidJson: '잘못된 JSON입니다. 형식을 확인하세요',
+        noAction: '단일 액션 설정 객체가 필요합니다 (입력창의 예시 참조)',
+        unsupportedBackend: 'webhook 타입 백엔드만 지원합니다'
+      },
+      toasts: {
+        filled: '폼에 반영했습니다. 확인 후 저장하세요',
+        copied: '클립보드에 복사했습니다'
+      }
+    }
   },
   audit: { title: '감사 로그', action: '작업', target: '대상', user: '사용자', time: '시각' },
   action: {
