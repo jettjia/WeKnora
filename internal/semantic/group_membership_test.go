@@ -67,15 +67,22 @@ func TestFilterGrantableMemberIDs(t *testing.T) {
 	ctx := context.Background()
 	seedTenantTopology(t, e)
 
-	// u1: 本空间成员 → 通过; u2: 共享空间成员 → 通过;
-	// u3: 无组织关系 → 拒绝; ghost: 不存在于任何空间 → 拒绝。
-	grantable, rejected, err := e.repo.FilterGrantableMemberIDs(ctx, 1, []string{"u1", "u2", "u3", "ghost"})
+	// 普通贡献者视角: u1 本空间成员 → 通过; u2 共享空间成员 → 通过;
+	// u3 无组织关系 → 拒绝; ghost 不存在于任何空间 → 拒绝。
+	grantable, rejected, err := e.repo.FilterGrantableMemberIDs(ctx, 1, []string{"u1", "u2", "u3", "ghost"}, false)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"u1", "u2"}, grantable)
 	assert.ElementsMatch(t, []string{"u3", "ghost"}, rejected)
 
+	// 系统管理员视角: includeAll=true, 部署内有空间归属的用户皆可授权;
+	// 无任何空间归属的 ghost 仍拒绝 (无使用上下文)。
+	grantable, rejected, err = e.repo.FilterGrantableMemberIDs(ctx, 1, []string{"u3", "ghost"}, true)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"u3"}, grantable)
+	assert.ElementsMatch(t, []string{"ghost"}, rejected)
+
 	// 空入参安全。
-	grantable, rejected, err = e.repo.FilterGrantableMemberIDs(ctx, 1, nil)
+	grantable, rejected, err = e.repo.FilterGrantableMemberIDs(ctx, 1, nil, false)
 	require.NoError(t, err)
 	assert.Empty(t, grantable)
 	assert.Empty(t, rejected)

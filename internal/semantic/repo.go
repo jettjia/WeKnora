@@ -213,6 +213,41 @@ func (r *Repository) ReplaceGroupMembers(ctx context.Context, tenantID uint64, g
 }
 
 // ListGroupMembers lists one group's memberships.
+// ListMemberCandidates returns the data-group member picker directory:
+// users of the tenant itself plus users of workspaces sharing an
+// organization with it. allUsers=true (system admin) returns every user
+// with a workspace membership in the deployment.
+func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, allUsers bool) ([]map[string]interface{}, error) {
+	base := `
+		SELECT DISTINCT tm.user_id, u.username, u.email,
+		       t.name AS tenant_name,
+		       (tm.tenant_id = ?) AS is_current
+		FROM tenant_members tm
+		JOIN users u ON u.id = tm.user_id AND u.deleted_at IS NULL
+		JOIN tenants t ON t.id = tm.tenant_id
+		WHERE tm.tenant_id = ?
+		   OR tm.tenant_id IN (
+		       SELECT tenant_id FROM organization_tenant_members
+		       WHERE organization_id IN (
+		           SELECT organization_id FROM organization_tenant_members
+		           WHERE tenant_id = ?
+		       ))
+		ORDER BY t.name, u.username`
+	if allUsers {
+		base = `
+		SELECT DISTINCT tm.user_id, u.username, u.email,
+		       t.name AS tenant_name,
+		       (tm.tenant_id = ?) AS is_current
+		FROM tenant_members tm
+		JOIN users u ON u.id = tm.user_id AND u.deleted_at IS NULL
+		JOIN tenants t ON t.id = tm.tenant_id
+		ORDER BY t.name, u.username`
+	}
+	var out []map[string]interface{}
+	err := r.db.WithContext(ctx).Raw(base, tenantID, tenantID, tenantID).Scan(&out).Error
+	return out, err
+}
+
 func (r *Repository) ListGroupMembers(
 	ctx context.Context,
 	tenantID uint64,
@@ -241,7 +276,7 @@ func (r *Repository) UserGroupNames(ctx context.Context, userID string) ([]strin
 // grantable and rejected. A user is grantable when they are a member of the
 // tenant itself or of any workspace sharing at least one organization with
 // it (shared-space governance, mirrors agent/KB sharing).
-func (r *Repository) FilterGrantableMemberIDs(ctx context.Context, tenantID uint64, userIDs []string) (grantable []string, rejected []string, err error) {
+func (r *Repository) FilterGrantableMemberIDs(ctx context.Context, tenantID uint64, userIDs []string, includeAll bool) (grantable []string, rejected []string, err error) {
 	if len(userIDs) == 0 {
 		return []string{}, []string{}, nil
 	}
@@ -267,7 +302,7 @@ func (r *Repository) FilterGrantableMemberIDs(ctx context.Context, tenantID uint
 	}
 	byID := make(map[string]bool, len(rows))
 	for _, row := range rows {
-		byID[row.UserID] = row.Direct == 1 || row.OrgShared == 1
+		byID[row.UserID] = includeAll || row.Direct == 1 || row.OrgShared == 1
 	}
 	grantable = []string{}
 	rejected = []string{}

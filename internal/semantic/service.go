@@ -1222,8 +1222,13 @@ func (e *Engine) SetGroupMembers(
 	if err != nil {
 		return err
 	}
-	// 跨空间授权校验: 被加入者必须是本空间成员, 或与本空间同属一个共享空间
-	grantable, rejected, err := e.repo.FilterGrantableMemberIDs(ctx, tenant, userIDs)
+	// 跨空间授权校验: 被加入者必须是本空间成员, 或与本空间同属一个共享空间;
+	// 系统管理员不受组织范围限制 (部署运营者可授权任何用户)
+	isSysAdmin, err := e.repo.IsSystemAdmin(ctx, userID)
+	if err != nil {
+		logger.Warnf(ctx, "[semantic] is_system_admin lookup failed: %v", err)
+	}
+	grantable, rejected, err := e.repo.FilterGrantableMemberIDs(ctx, tenant, userIDs, isSysAdmin)
 	if err != nil {
 		return err
 	}
@@ -1247,6 +1252,17 @@ func (e *Engine) ListGroupMembers(ctx context.Context, tenant uint64, groupID st
 }
 
 // ListAudits lists recent module audit records.
+// MemberCandidates returns the data-group member picker directory: users of
+// the tenant itself plus users of workspaces sharing an organization with it.
+// System admins see every workspace user in the deployment.
+func (e *Engine) MemberCandidates(ctx context.Context, tenantID uint64, userID string) ([]map[string]interface{}, error) {
+	allUsers, err := e.repo.IsSystemAdmin(ctx, userID)
+	if err != nil {
+		logger.Warnf(ctx, "[semantic] is_system_admin lookup failed: %v", err)
+	}
+	return e.repo.ListMemberCandidates(ctx, tenantID, allUsers)
+}
+
 func (e *Engine) ListAudits(ctx context.Context, tenant uint64, limit int) ([]*AuditLog, error) {
 	return e.repo.ListAudits(ctx, tenant, limit)
 }

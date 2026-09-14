@@ -134,6 +134,7 @@ func registerRoutes(g *gin.RouterGroup, h *Handler, viewer, contributor, admin g
 	g.PUT("/groups/:id", admin, h.UpdateGroup)
 	g.DELETE("/groups/:id", admin, h.DeleteGroup)
 	g.PUT("/groups/:id/members", admin, h.SetGroupMembers)
+	g.GET("/groups/candidates", viewer, h.MemberCandidates)
 	g.GET("/groups/:id/members", viewer, h.ListGroupMembers)
 	g.GET("/groups/:id/usage", viewer, h.GroupUsage)
 

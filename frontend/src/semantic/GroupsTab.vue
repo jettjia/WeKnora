@@ -107,8 +107,8 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { createGroup, deleteGroup, getGroupUsage, listGroupMembers, setGroupMembers, updateGroup, type DataGroup } from './api'
-import { fetchAllTenantMembers, type TenantMember } from '@/api/tenant/members'
-import { listMyOrganizations, listMembers as listOrgMembers } from '@/api/organization'
+import type { TenantMember } from '@/api/tenant/members'
+import { listMemberCandidates } from './api'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 
@@ -235,38 +235,18 @@ async function openMembers(g: DataGroup) {
   memberGroup.value = g
   memberSearch.value = ''
   membersVisible.value = true
-  const tenantId = useAuthStore().currentTenantId
-  const [allMembers, groupMembersResp] = await Promise.all([
-    fetchAllTenantMembers(tenantId as unknown as number),
+  // 候选名单由后端聚合: 本空间成员 + 共享空间各成员空间的用户;
+  // 系统管理员可见部署内全部用户。保存时服务端按同样口径校验。
+  const [candResp, groupMembersResp] = await Promise.all([
+    listMemberCandidates(),
     listGroupMembers(g.id)
   ])
-
-  // 跨空间成员: 与本空间同属共享空间的空间, 其成员也可加入数据组
-  // (服务端保存时按组织关系校验, 此处仅扩充候选名单)。
-  const combined: (TenantMember & { tenant_name?: string })[] = allMembers.map(m => ({ ...m }))
-  try {
-    const orgsResp = await listMyOrganizations()
-    // 组织接口返回 {data: {organizations, total}, success} 包裹结构
-    const orgs = orgsResp?.data?.organizations || (orgsResp as any)?.organizations || []
-    const seen = new Set(combined.map(m => m.user_id))
-    for (const org of orgs) {
-      const orgMembersResp = await listOrgMembers(org.id)
-      const orgMembers = orgMembersResp?.data?.members || orgMembersResp?.members || []
-      for (const om of orgMembers) {
-        if (seen.has(om.user_id)) continue
-        seen.add(om.user_id)
-        combined.push({
-          user_id: om.user_id,
-          username: om.username || om.email,
-          email: om.email,
-          tenant_name: om.tenant_name
-        } as TenantMember)
-      }
-    }
-  } catch {
-    // 共享空间成员拉取失败不阻塞本空间成员配置
-  }
-  members.value = combined
+  members.value = (candResp.candidates || []).map(c => ({
+    user_id: c.user_id,
+    username: c.username || c.email,
+    email: c.email,
+    tenant_name: c.is_current ? undefined : c.tenant_name
+  } as TenantMember))
   checkedUserIds.value = groupMembersResp.user_ids || []
 }
 

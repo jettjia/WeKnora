@@ -255,6 +255,18 @@ export function setGroupMembers(id: string, userIds: string[]) {
   return put(`/api/v1/semantic/groups/${id}/members`, { user_ids: userIds })
 }
 
+export interface MemberCandidate {
+  user_id: string
+  username: string
+  email: string
+  tenant_name: string
+  is_current: boolean
+}
+
+export function listMemberCandidates() {
+  return get<{ candidates: MemberCandidate[] }>('/api/v1/semantic/groups/candidates')
+}
+
 export function listGroupMembers(id: string) {
   return get<{ user_ids: string[] }>(`/api/v1/semantic/groups/${id}/members`)
 }
