@@ -1,0 +1,161 @@
+// 自动化模块自带 i18n 消息: 启动时通过 mergeLocaleMessage 合并进主 i18n
+// 实例 (见 index.ts), 上游 5 个 locale 文件保持零改动 (semantic 模块同款
+// 自包含模式)。
+import i18n from '@/i18n'
+
+const zh = {
+  menu: { automations: '自动化' },
+  list: {
+    title: '自动化',
+    subtitle: '定时执行智能体: 周期性跑一轮查询并沉淀结果',
+    add: '新建自动化',
+    empty: '还没有自动化任务, 新建一个让智能体定时为你工作',
+    lastRun: '上次运行',
+    nextRun: '下次执行',
+    never: '未运行',
+    confirmDelete: '删除后运行历史一并清除, 且不可恢复',
+  },
+  run: {
+    status: {
+      pending: '排队中',
+      running: '运行中',
+      success: '成功',
+      failed: '失败',
+      timeout: '超时',
+      skipped: '已跳过',
+      cancelled: '已取消',
+    },
+    trigger: { cron: '定时', manual: '手动' },
+    history: '运行历史',
+    colStatus: '状态', colTrigger: '触发', colStarted: '开始时间', colDuration: '耗时', colOutput: '输出',
+    empty: '还没有运行记录',
+    runNow: '立即运行',
+    runQueued: '已加入执行队列',
+    viewSession: '查看会话',
+  },
+  drawer: {
+    add: '新建自动化',
+    edit: '编辑自动化',
+    desc: '让智能体按周期自动执行一轮任务',
+    sectionBasic: '基础信息',
+    sectionContent: '执行内容',
+    sectionSchedule: '执行计划',
+    sectionAdvanced: '高级',
+    name: '标识 (slug)',
+    nameHint: '小写字母/数字/下划线, 字母开头',
+    nameError: '标识必须以字母开头, 只含小写字母/数字/下划线',
+    title: '显示名称',
+    description: '描述',
+    agent: '绑定智能体',
+    agentHint: '每次运行以该智能体的身份与配置执行',
+    query: '指令模板',
+    queryHint: '每次运行发送给智能体的指令, 支持变量',
+    schedule: '执行周期 (cron)',
+    scheduleHint: '5 段式 cron: 分 时 日 月 周',
+    schedulePresets: { daily: '每天 09:00', weekly: '每周一 09:00', hourly: '每小时', custom: '自定义' },
+    timezone: '时区',
+    nextRuns: '未来 3 次执行',
+    enabled: '启用',
+    overlap: '重叠策略',
+    overlapSkip: '跳过 (上次未完成则本次不执行)',
+    overlapQueue: '排队 (等上次完成后执行)',
+    timeout: '超时 (分钟)',
+    timeoutHint: '超过该时长标记为超时并终止执行',
+    save: '保存',
+    saved: '已保存',
+    delete: '删除自动化',
+    deleteConfirm: '删除后运行历史一并清除, 且不可恢复',
+    deleted: '已删除',
+    cronInvalid: 'cron 表达式无效',
+    selectAgent: '选择智能体',
+  },
+  common: { cancel: '取消', confirm: '确认' },
+}
+
+const en = {
+  menu: { automations: 'Automations' },
+  list: {
+    title: 'Automations',
+    subtitle: 'Scheduled agent runs: put your agents to work on a schedule',
+    add: 'New Automation',
+    empty: 'No automations yet. Create one to put an agent on a schedule',
+    lastRun: 'Last run',
+    nextRun: 'Next run',
+    never: 'Never run',
+    confirmDelete: 'Deleting also removes the run history. This cannot be undone',
+  },
+  run: {
+    status: {
+      pending: 'Pending',
+      running: 'Running',
+      success: 'Success',
+      failed: 'Failed',
+      timeout: 'Timeout',
+      skipped: 'Skipped',
+      cancelled: 'Cancelled',
+    },
+    trigger: { cron: 'Scheduled', manual: 'Manual' },
+    colStatus: 'Status', colTrigger: 'Trigger', colStarted: 'Started', colDuration: 'Duration', colOutput: 'Output',
+    history: 'Run History',
+    empty: 'No runs yet',
+    runNow: 'Run Now',
+    runQueued: 'Run enqueued',
+    viewSession: 'View Session',
+  },
+  drawer: {
+    add: 'New Automation',
+    edit: 'Edit Automation',
+    desc: 'Run an agent on a schedule',
+    sectionBasic: 'Basics',
+    sectionContent: 'Execution',
+    sectionSchedule: 'Schedule',
+    sectionAdvanced: 'Advanced',
+    name: 'Slug',
+    nameHint: 'Lowercase letters, digits, underscores; starts with a letter',
+    nameError: 'Slug must start with a letter and contain only lowercase letters, digits, underscores',
+    title: 'Title',
+    description: 'Description',
+    agent: 'Agent',
+    agentHint: 'Every run executes with this agent and its configuration',
+    query: 'Query Template',
+    queryHint: 'Instruction sent to the agent on every run; variables supported',
+    schedule: 'Schedule (cron)',
+    scheduleHint: '5-field cron: min hour day month weekday',
+    schedulePresets: { daily: 'Daily 09:00', weekly: 'Weekly Mon 09:00', hourly: 'Hourly', custom: 'Custom' },
+    timezone: 'Timezone',
+    nextRuns: 'Next 3 runs',
+    enabled: 'Enabled',
+    overlap: 'Overlap Policy',
+    overlapSkip: 'Skip (skip this tick while the previous run is in progress)',
+    overlapQueue: 'Queue (wait until the previous run finishes)',
+    timeout: 'Timeout (minutes)',
+    timeoutHint: 'Runs exceeding this duration are marked as timed out and terminated',
+    save: 'Save',
+    saved: 'Saved',
+    delete: 'Delete Automation',
+    deleteConfirm: 'Deleting also removes the run history. This cannot be undone',
+    deleted: 'Deleted',
+    cronInvalid: 'Invalid cron expression',
+    selectAgent: 'Select an agent',
+  },
+  common: { cancel: 'Cancel', confirm: 'OK' },
+}
+
+// ru/ja/ko 以英文兜底, 后续补翻 (semantic 模块同款策略)。
+const ru = JSON.parse(JSON.stringify(en))
+const ja = JSON.parse(JSON.stringify(en))
+const ko = JSON.parse(JSON.stringify(en))
+
+const MESSAGES: Record<string, Record<string, unknown>> = {
+  'zh-CN': { automation: zh, menu: { automations: zh.menu.automations } },
+  'en-US': { automation: en, menu: { automations: en.menu.automations } },
+  'ru-RU': { automation: ru, menu: { automations: ru.menu.automations } },
+  'ja-JP': { automation: ja, menu: { automations: ja.menu.automations } },
+  'ko-KR': { automation: ko, menu: { automations: ko.menu.automations } },
+}
+
+export function mergeLocaleMessage() {
+  for (const [locale, messages] of Object.entries(MESSAGES)) {
+    i18n.global.mergeLocaleMessage(locale, messages)
+  }
+}

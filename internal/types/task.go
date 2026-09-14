@@ -42,6 +42,7 @@ const (
 	QueueSync           = "sync"
 	QueueMaintenance    = "low"
 	QueueWiki           = "wiki"
+	QueueAutomation     = "automation"
 	// QueueMemory carries debounced long-term memory distillation. It sits in
 	// the enrichment pool because it is a background LLM call whose latency
 	// nobody is waiting on.
@@ -85,6 +86,10 @@ var queueDefinitions = []QueueDefinition{
 		TypeKnowledgeListDelete, TypeKnowledgeListReparse, TypeKnowledgeMove,
 	}},
 	{Name: QueueWiki, Pool: WorkerPoolWiki, Weight: 1, TaskTypes: []string{TypeWikiIngest, TypeWikiFinalize}},
+	// Scheduled agent runs (automation module): long-lived agent executions
+	// belong on the low-traffic maintenance pool so they never crowd the KB
+	// parse pipeline.
+	{Name: QueueAutomation, Pool: WorkerPoolMaintenance, Weight: 1, TaskTypes: []string{TypeAutomationRun}},
 }
 
 // QueueDefinitions returns a copy so callers cannot mutate global topology.
@@ -250,6 +255,7 @@ const (
 	TypeManualProcess            = "manual:process"             // 手工知识更新任务（cleanup + 重新索引）
 	TypeDataSourceSync           = "datasource:sync"            // 数据源同步任务
 	TypeWikiIngest               = "wiki:ingest"                // Wiki 页面同步任务
+	TypeAutomationRun            = "automation:run"             // 自动化: 定时执行智能体
 	TypeWikiFinalize             = "wiki:finalize"              // Wiki KB 级收尾任务（防抖：索引重建/死链清理/交叉链接）
 	TypeTemporaryDocumentProcess = "temporary_document:process" // 会话临时文档解析任务
 	// TypeMemoryExtract 长期记忆抽取任务（会话轮次防抖后异步执行）

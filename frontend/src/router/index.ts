@@ -43,6 +43,7 @@ function hasPendingOIDCCallback() {
   return hash.includes('oidc_result=') || hash.includes('oidc_error=')
 }
 
+import '@/automation'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -138,6 +139,12 @@ const router = createRouter({
           name: "agentList",
           component: () => import("../views/agent/AgentList.vue"),
           meta: { requiresInit: true, requiresAuth: true, requiredCapability: 'agents' }
+        },
+        {
+          path: "automations",
+          name: "automationList",
+          component: () => import("../views/automation/Automations.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
         },
         {
           path: "integrations",
