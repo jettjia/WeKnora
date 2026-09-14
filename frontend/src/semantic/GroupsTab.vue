@@ -246,11 +246,13 @@ async function openMembers(g: DataGroup) {
   const combined: (TenantMember & { tenant_name?: string })[] = allMembers.map(m => ({ ...m }))
   try {
     const orgsResp = await listMyOrganizations()
-    const orgs = orgsResp.organizations || []
+    // 组织接口返回 {data: {organizations, total}, success} 包裹结构
+    const orgs = orgsResp?.data?.organizations || (orgsResp as any)?.organizations || []
     const seen = new Set(combined.map(m => m.user_id))
     for (const org of orgs) {
-      const orgMembers = await listOrgMembers(org.id)
-      for (const om of orgMembers.members || []) {
+      const orgMembersResp = await listOrgMembers(org.id)
+      const orgMembers = orgMembersResp?.data?.members || orgMembersResp?.members || []
+      for (const om of orgMembers) {
         if (seen.has(om.user_id)) continue
         seen.add(om.user_id)
         combined.push({
