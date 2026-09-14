@@ -88,6 +88,50 @@ func TestFilterGrantableMemberIDs(t *testing.T) {
 	assert.Empty(t, rejected)
 }
 
+// 回归: 候选目录 allUsers 分支 (系统管理员/空间 admin) 的 SQL 只带 1 个
+// is_current 占位符, 固定传 3 参会在真实驱动上因参数数不匹配直接报错 (500)。
+func TestMemberCandidatesArgCount(t *testing.T) {
+	e, _ := newTestEngine(t)
+	ctx := context.Background()
+	seedTenantTopology(t, e)
+	require.NoError(t, e.repo.db.AutoMigrate(&types.User{}, &types.Tenant{}))
+
+	tenants := []types.Tenant{
+		{ID: 1, Name: "ws-1"}, {ID: 2, Name: "ws-2"}, {ID: 3, Name: "ws-3"},
+	}
+	for i := range tenants {
+		require.NoError(t, e.repo.db.Create(&tenants[i]).Error)
+	}
+	users := []types.User{
+		{ID: "u1", Username: "u1", Email: "u1@test.dev", PasswordHash: "x"},
+		{ID: "u2", Username: "u2", Email: "u2@test.dev", PasswordHash: "x"},
+		{ID: "u3", Username: "u3", Email: "u3@test.dev", PasswordHash: "x"},
+	}
+	for i := range users {
+		require.NoError(t, e.repo.db.Create(&users[i]).Error)
+	}
+
+	// allUsers=true: 部署内所有有空间归属的用户都可见。
+	all, err := e.repo.ListMemberCandidates(ctx, 1, true)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"u1", "u2", "u3"}, candidateIDs(all))
+
+	// allUsers=false: 本空间 + 共享空间成员, u3 不可见。
+	scoped, err := e.repo.ListMemberCandidates(ctx, 1, false)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"u1", "u2"}, candidateIDs(scoped))
+}
+
+func candidateIDs(rows []map[string]interface{}) []string {
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if v, ok := r["user_id"].(string); ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // SetGroupMembers 端到端: 跨空间成员可加入; 无关系用户被 409 拒绝。
 func TestSetGroupMembersCrossWorkspace(t *testing.T) {
 	e, _ := newTestEngine(t)

@@ -244,7 +244,12 @@ func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, 
 		ORDER BY t.name, u.username`
 	}
 	var out []map[string]interface{}
-	err := r.db.WithContext(ctx).Raw(base, tenantID, tenantID, tenantID).Scan(&out).Error
+	var err error
+	if allUsers {
+		err = r.db.WithContext(ctx).Raw(base, tenantID).Scan(&out).Error
+	} else {
+		err = r.db.WithContext(ctx).Raw(base, tenantID, tenantID, tenantID).Scan(&out).Error
+	}
 	return out, err
 }
 
