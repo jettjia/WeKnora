@@ -325,3 +325,36 @@ func TestAuditRecordsPublish(t *testing.T) {
 	}
 	assert.True(t, found, "publish audit record missing")
 }
+
+// 启动对账: 以 DB 为准重建带租户前缀的模型文件, 清掉旧部署器格式遗留的
+// 无前缀文件 (与带前缀文件同名立方体会让 Cube 编译报 duplicate cube name)。
+func TestReconcileDeployedFiles(t *testing.T) {
+	e, _ := newTestEngine(t)
+	ctx := context.Background()
+
+	require.NoError(t, e.repo.db.Create(&SemanticModel{
+		TenantID:      1,
+		Name:          "orders",
+		Status:        ModelStatusPublished,
+		PublishedYAML: "cubes:\n  - name: orders\n",
+	}).Error)
+
+	auto := filepath.Join(e.cfg.ModelDir, "auto")
+	require.NoError(t, os.MkdirAll(auto, 0o755))
+	write := func(name, content string) {
+		require.NoError(t, os.WriteFile(filepath.Join(auto, name), []byte(content), 0o644))
+	}
+	write("orders.yaml", "cubes: [{name: orders}]") // 旧格式遗留
+	write("ghost.yaml", "cubes: [{name: ghost}]")   // 意外文件
+
+	require.NoError(t, e.ReconcileDeployedFiles(ctx))
+
+	b, err := os.ReadFile(filepath.Join(auto, "t1_orders.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, "cubes:\n  - name: orders\n", string(b))
+
+	_, err = os.Stat(filepath.Join(auto, "orders.yaml"))
+	assert.True(t, os.IsNotExist(err), "legacy file should be removed")
+	_, err = os.Stat(filepath.Join(auto, "ghost.yaml"))
+	assert.True(t, os.IsNotExist(err), "unexpected file should be removed")
+}

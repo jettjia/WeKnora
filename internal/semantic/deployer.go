@@ -80,6 +80,30 @@ func (d *Deployer) UnpublishModel(tenantID uint64, name string) error {
 	return nil
 }
 
+// CleanupAutoDir removes every file in auto/ whose name is not in keep.
+// Startup reconciliation uses it to drop files left by older deployer
+// formats (e.g. the pre-tenant-prefix "<model>.yaml" layout) — alongside
+// their prefixed replacements they define the same cube twice, which fails
+// Cube's compile with "duplicate cube name" for every caller.
+func (d *Deployer) CleanupAutoDir(keep map[string]bool) error {
+	entries, err := os.ReadDir(d.autoDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || keep[entry.Name()] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(d.autoDir(), entry.Name())); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 // DatasourceEntry is one connection serialized into datasources.yaml.
 type DatasourceEntry struct {
 	ID     string

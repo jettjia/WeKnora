@@ -90,6 +90,17 @@ func (r *Repository) ListModels(ctx context.Context, tenantID uint64) ([]*Semant
 	return out, err
 }
 
+// ListPublishedModelsAllTenants returns published models of the whole
+// deployment. Startup file reconciliation uses this as the source of truth
+// for what the auto/ model directory should contain.
+func (r *Repository) ListPublishedModelsAllTenants(ctx context.Context) ([]*SemanticModel, error) {
+	var out []*SemanticModel
+	err := r.db.WithContext(ctx).
+		Where("status = ?", ModelStatusPublished).
+		Order("tenant_id, created_at ASC").Find(&out).Error
+	return out, err
+}
+
 // AllModelNames returns every non-deleted model name of the deployment
 // (any status). Publish-time join validation uses this: mutually-joined
 // model pairs must be publishable in any order — compile verification via

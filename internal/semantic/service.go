@@ -901,6 +901,30 @@ func (e *Engine) Rollback(
 	return res, nil
 }
 
+// ReconcileDeployedFiles heals the auto/ model directory against the DB at
+// startup: every published model is re-deployed under its tenant-prefixed
+// filename from the PublishedYAML snapshot, and any other file in auto/ is
+// removed. Older deployer formats left unprefixed files behind; alongside
+// their prefixed replacements they define the same cube twice, which fails
+// Cube's compile ("duplicate cube name") for every caller.
+func (e *Engine) ReconcileDeployedFiles(ctx context.Context) error {
+	models, err := e.repo.ListPublishedModelsAllTenants(ctx)
+	if err != nil {
+		return err
+	}
+	keep := make(map[string]bool, len(models))
+	for _, m := range models {
+		if m.PublishedYAML == "" {
+			continue // nothing to deploy from; stale file is cleaned below
+		}
+		if err := e.deployer.PublishModel(m.TenantID, m.Name, m.PublishedYAML); err != nil {
+			return fmt.Errorf("redeploy model %s: %w", m.Name, err)
+		}
+		keep[e.deployer.tenantFile(m.TenantID, m.Name)] = true
+	}
+	return e.deployer.CleanupAutoDir(keep)
+}
+
 // ---- query paths (preview + agent tools) ----
 
 // MetaForUser returns /v1/meta filtered to what the caller's groups can see.
