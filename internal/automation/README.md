@@ -45,6 +45,21 @@ WeKnora 的定时智能体执行模块: 管理员把"某个智能体 + 一条指
 无独立组件。依赖: Redis (Asynq 队列 + 单飞锁)、既有 Asynq worker 池
 (automation 队列挂 maintenance 池)。迁移 000902 自动应用。
 
+## 运维注意: 迁移版本对账
+
+golang-migrate 启动时校验"数据库当前版本在迁移源中存在"——若 schema_migrations
+记录的版本号被重编号移除 (如历史 93), readUp 直接 ErrNotExist 空转, 后续迁移
+(900/901/902) 全部不会自动应用, 服务照常启动但模块表缺失。对账方式:
+
+```sql
+-- 表已存在时: 直接把版本号推到目标值 (幂等 DDL 已验证)
+UPDATE schema_migrations SET version = 902, dirty = false;
+-- 表不存在时: 手工应用迁移文件后同样更新版本号
+```
+
+对账后重启, 调度器正常加载。版本号回到迁移源连续区间后, 后续 903+ 会正常
+自动应用。
+
 ## 已知限制 (v1)
 
 - 通知推送 (webhook 回调 / IM) 未实现; notify_config 字段预留
