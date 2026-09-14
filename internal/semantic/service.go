@@ -1222,13 +1222,18 @@ func (e *Engine) SetGroupMembers(
 	if err != nil {
 		return err
 	}
-	// 跨空间授权校验: 被加入者必须是本空间成员, 或与本空间同属一个共享空间;
-	// 系统管理员不受组织范围限制 (部署运营者可授权任何用户)
+	// 跨空间授权校验: 被加入者必须是本空间成员, 或与本空间同属一个共享空间。
+	// 系统管理员与本空间 owner/admin 不受组织范围限制——自部署形态下空间
+	// 管理员有权决定把本空间数据开放给部署内的任何用户。
 	isSysAdmin, err := e.repo.IsSystemAdmin(ctx, userID)
 	if err != nil {
 		logger.Warnf(ctx, "[semantic] is_system_admin lookup failed: %v", err)
 	}
-	grantable, rejected, err := e.repo.FilterGrantableMemberIDs(ctx, tenant, userIDs, isSysAdmin)
+	isTenantAdmin, err := e.repo.IsTenantAdmin(ctx, tenant, userID)
+	if err != nil {
+		logger.Warnf(ctx, "[semantic] is_tenant_admin lookup failed: %v", err)
+	}
+	grantable, rejected, err := e.repo.FilterGrantableMemberIDs(ctx, tenant, userIDs, isSysAdmin || isTenantAdmin)
 	if err != nil {
 		return err
 	}
@@ -1256,11 +1261,23 @@ func (e *Engine) ListGroupMembers(ctx context.Context, tenant uint64, groupID st
 // the tenant itself plus users of workspaces sharing an organization with it.
 // System admins see every workspace user in the deployment.
 func (e *Engine) MemberCandidates(ctx context.Context, tenantID uint64, userID string) ([]map[string]interface{}, error) {
-	allUsers, err := e.repo.IsSystemAdmin(ctx, userID)
+	allUsers, err := e.memberGrantAll(ctx, tenantID, userID)
 	if err != nil {
-		logger.Warnf(ctx, "[semantic] is_system_admin lookup failed: %v", err)
+		logger.Warnf(ctx, "[semantic] grant-all lookup failed: %v", err)
 	}
 	return e.repo.ListMemberCandidates(ctx, tenantID, allUsers)
+}
+
+// memberGrantAll: 系统管理员或本空间 owner/admin 可授权部署内任何用户。
+func (e *Engine) memberGrantAll(ctx context.Context, tenantID uint64, userID string) (bool, error) {
+	isSysAdmin, err := e.repo.IsSystemAdmin(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	if isSysAdmin {
+		return true, nil
+	}
+	return e.repo.IsTenantAdmin(ctx, tenantID, userID)
 }
 
 func (e *Engine) ListAudits(ctx context.Context, tenant uint64, limit int) ([]*AuditLog, error) {
