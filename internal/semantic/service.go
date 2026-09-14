@@ -67,9 +67,6 @@ func NewEngine(cfg Config, db *gorm.DB) (*Engine, error) {
 	return e, nil
 }
 
-// Client exposes the Cube client for the agent tools.
-func (e *Engine) Client() *cubeclient.Client { return e.client }
-
 // Info reports module health for the studio header.
 type Info struct {
 	Enabled     bool     `json:"enabled"`
@@ -1551,17 +1548,3 @@ func setViewPolicy(
 // corrupting each other (e.g. A publishes while B writes a broken model,
 // causing the whole schema to fail compilation and A to be falsely marked failed).
 var publishMu sync.Mutex
-
-// canManageModel reports whether the user can perform destructive operations
-// (publish / unpublish / delete / rollback) on a model. The creator always
-// can; admins can manage anyone's models. Matches the KB OwnedKBOrAdmin pattern.
-func canManageModel(model *SemanticModel, userID string, isAdmin bool) bool {
-	return model.CreatedBy == userID || isAdmin
-}
-
-// canEditModel reports whether the user can modify a model's draft.
-// Contributors can edit any model (same as upstream KB edit-on-create pattern
-// for draft collaboration), but destructive ops require canManageModel.
-func canEditModel(_ *SemanticModel, _ string, _ bool) bool {
-	return true // any contributor can edit drafts; per-model ownership checked at delete/publish
-}

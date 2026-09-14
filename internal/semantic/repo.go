@@ -90,28 +90,6 @@ func (r *Repository) ListModels(ctx context.Context, tenantID uint64) ([]*Semant
 	return out, err
 }
 
-// PublishedModelYAMLs returns name → published YAML across the deployment:
-// model files land in one shared Cube instance, so join-target validation
-// must consider every published model, not just the caller's tenant.
-func (r *Repository) PublishedModelYAMLs(ctx context.Context) (map[string]string, error) {
-	var rows []struct {
-		Name          string
-		PublishedYAML string
-	}
-	err := r.db.WithContext(ctx).Model(&SemanticModel{}).
-		Select("name, published_yaml").
-		Where("status = ?", ModelStatusPublished).
-		Find(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]string, len(rows))
-	for _, row := range rows {
-		out[row.Name] = row.PublishedYAML
-	}
-	return out, nil
-}
-
 // AllModelNames returns every non-deleted model name of the deployment
 // (any status). Publish-time join validation uses this: mutually-joined
 // model pairs must be publishable in any order — compile verification via

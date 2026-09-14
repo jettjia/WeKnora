@@ -46,9 +46,6 @@ func New(endpoint, secret string, timeout time.Duration) *Client {
 	}
 }
 
-// Endpoint returns the configured API base URL (for health checks).
-func (c *Client) Endpoint() string { return c.endpoint }
-
 // sign issues a short-lived JWT whose payload is the securityContext.
 func (c *Client) sign(secCtx SecurityContext) (string, error) {
 	claims := jwt.MapClaims{

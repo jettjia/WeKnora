@@ -53,8 +53,8 @@ func TestClientSignJWT(t *testing.T) {
 
 func TestClientEmptyEndpoint(t *testing.T) {
 	c := New("", "secret", 0)
-	// Endpoint() returns empty string when not configured
-	if c.Endpoint() != "" {
+	// an empty endpoint must stay empty (dispatch refuses to run against it)
+	if c.endpoint != "" {
 		t.Errorf("expected empty endpoint")
 	}
 }

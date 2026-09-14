@@ -4,11 +4,8 @@ export const zhCN = {
   info: {
     cubeReady: 'Cube 服务正常',
     cubeDown: 'Cube 服务不可用',
-    guidedTypes: '引导式数据源',
     noConnection: '还没有数据源。先在「数据源」里添加一个数据库连接, 再回来建模。',
-    denied: '当前角色为只读, 仅可查看模型与数据',
     subtitle: '配置数据源连接, 维护语义模型, 按数据组控制谁可以查什么',
-    modelGroup: '全部模型'
   },
   tabs: { models: '模型', connections: '数据源', groups: '数据组', actions: '操作' },
   conn: {
@@ -30,7 +27,6 @@ export const zhCN = {
     extraHint: '如 {"sslmode": "require"}, 原样透传给 Cube 驱动',
     test: '测试连接',
     testSaved: '测试已保存连接',
-    testing: '测试中...',
     testOk: '连接成功 ({ms}ms)',
     testFail: '连接失败',
     delete: '删除',
@@ -38,29 +34,21 @@ export const zhCN = {
     deleteBlocked: '连接仍被模型引用, 无法删除',
     saved: '已保存',
     empty: '暂无数据源',
-    noDescription: '暂无描述',
     latency: '{ms}ms'
   },
   model: {
     add: '新建模型',
     empty: '暂无模型。先添加数据源, 再从表生成草稿或从空白开始。',
     noDescription: '暂无描述',
-    groupCount: '{n} 个数据组',
     emptyFavorites: '还没有收藏的模型, 悬停卡片点星标收藏',
     emptyRecents: '最近没有查看过模型',
     name: '模型名 (slug)',
     titleField: '显示名称',
     description: '描述 (写给智能体看: 何时用这个模型、字段口径)',
-    kind: '类型',
-    kindCube: 'cube',
-    kindView: 'view (YAML 编辑)',
     connection: '数据源',
-    status: '状态',
     statusDraft: '草稿',
     statusPublished: '已发布',
     statusFailed: '发布失败',
-    version: '版本',
-    updated: '更新时间',
     publish: '发布',
     publishNote: '发布说明',
     publishNotePh: '本次发布改了什么 (可选)',
@@ -76,13 +64,9 @@ export const zhCN = {
     blank: '空白创建',
     chooseConn: '选择数据源',
     chooseTable: '选择表',
-    generate: '生成草稿',
-    generating: '生成中...',
     editor: {
       basic: '基本信息',
-      formMode: '表单模式',
       yamlMode: 'YAML 源码',
-      sql: 'SQL (源表/子查询)',
       dimensions: '维度 (dimensions)',
       measures: '指标 (measures)',
       joins: '关联 (joins)',
@@ -111,11 +95,8 @@ export const zhCN = {
       saved: '已保存',
       preview: '数据预览',
       previewRun: '查询',
-      previewEmpty: '勾选指标/维度后查询',
       previewPublishFirst: '模型尚未发布, 发布后可预览',
       previewNoData: '(无数据)',
-      denied: '权限不足',
-      needSaveFirst: '请先保存草稿'
     }
   },
   group: {
@@ -156,23 +137,6 @@ export const zhCN = {
     selectModelsDesc: '仅已发布的模型会出现; 运行时查询限定在这些模型内',
     runtimeHintTitle: '数据权限说明',
     runtimeHint: '会话用户的可见范围仍由数据建模里的数据组决定, 编排范围与数据权限取交集',
-    import: {
-      toggle: '从 JSON 导入',
-      hint: '粘贴动作配置 JSON, 解析后自动填回表单; 点保存之前不会提交任何内容。',
-      editOverwriteHint: '编辑模式下解析会覆盖下方表单内容。',
-      parse: '解析并填入',
-      copyJson: '复制 JSON',
-      errors: {
-        empty: '请先粘贴 JSON',
-        invalidJson: 'JSON 解析失败, 请检查格式',
-        noAction: '需要单个动作配置对象 (见输入框示例)',
-        unsupportedBackend: '仅支持 webhook 类型的 backend'
-      },
-      toasts: {
-        filled: '已解析并填入表单, 检查后保存',
-        copied: '已复制到剪贴板'
-      }
-    }
   },
   audit: { title: '操作审计', action: '操作', target: '对象', user: '操作人', time: '时间' },
   action: {
@@ -183,12 +147,9 @@ export const zhCN = {
     sectionWebhook: 'Webhook 配置',
     delete: '删除操作',
     deleteConfirm: '删除后不可恢复, 关联此操作的智能体将不再可用',
-    save: '保存',
     saved: '已保存',
     deleted: '已删除',
-    active: '已启用',
     empty: '还没有操作类型, 新建一个让智能体可以执行业务操作',
-    noDescription: '无描述',
     name: '标识 (slug)',
     nameHint: '小写字母/数字/下划线, 字母开头; 用作 action_run 的 action 参数',
     nameError: '标识必须以字母开头, 只含小写字母/数字/下划线',
@@ -218,6 +179,27 @@ export const zhCN = {
     secretKeepHint: '不修改则保留原密钥',
     allowedGroups: '允许执行的数据组',
     groupsHint: '选择可执行此操作的数据组',
+    testRun: '试运行',
+    testRunHint: '以当前已保存的配置真实调用一次 webhook (空入参, 走完整校验链路); 修改后请先保存',
+    testRunNeedSave: '先保存, 再试运行',
+    testRunEmpty: '(空响应)',
+    import: {
+      toggle: '从 JSON 导入',
+      hint: '粘贴动作配置 JSON, 解析后自动填回表单; 点保存之前不会提交任何内容。',
+      editOverwriteHint: '编辑模式下解析会覆盖下方表单内容。',
+      parse: '解析并填入',
+      copyJson: '复制 JSON',
+      errors: {
+        empty: '请先粘贴 JSON',
+        invalidJson: 'JSON 解析失败, 请检查格式',
+        noAction: '需要单个动作配置对象 (见输入框示例)',
+        unsupportedBackend: '仅支持 webhook 类型的 backend'
+      },
+      toasts: {
+        filled: '已解析并填入表单, 检查后保存',
+        copied: '已复制到剪贴板'
+      }
+    }
   }
 }
 
@@ -226,11 +208,8 @@ export const enUS = {
   info: {
     cubeReady: 'Cube service healthy',
     cubeDown: 'Cube service unavailable',
-    guidedTypes: 'Guided sources',
     noConnection: 'No data source yet. Add a database connection under "Data Sources" first.',
-    denied: 'Read-only role: you can view models and data but not edit',
     subtitle: 'Manage database connections, semantic models, and who can query what',
-    modelGroup: 'All models'
   },
   tabs: { models: 'Models', connections: 'Data Sources', groups: 'Data Groups', actions: 'Actions' },
   conn: {
@@ -252,7 +231,6 @@ export const enUS = {
     extraHint: 'e.g. {"sslmode": "require"}, passed to the Cube driver verbatim',
     test: 'Test connection',
     testSaved: 'Test saved connection',
-    testing: 'Testing...',
     testOk: 'Connected ({ms}ms)',
     testFail: 'Connection failed',
     delete: 'Delete',
@@ -260,29 +238,21 @@ export const enUS = {
     deleteBlocked: 'Connection is referenced by models',
     saved: 'Saved',
     empty: 'No data sources yet',
-    noDescription: 'No description',
     latency: '{ms}ms'
   },
   model: {
     add: 'New Model',
     empty: 'No models yet. Add a data source first, then generate a draft from a table or start blank.',
     noDescription: 'No description',
-    groupCount: '{n} groups',
     emptyFavorites: 'No favorited models yet — hover a card and click the star',
     emptyRecents: 'No recently viewed models',
     name: 'Model slug',
     titleField: 'Display name',
     description: 'Description (for the agent: when to use this model, member semantics)',
-    kind: 'Kind',
-    kindCube: 'cube',
-    kindView: 'view (YAML editing)',
     connection: 'Data source',
-    status: 'Status',
     statusDraft: 'Draft',
     statusPublished: 'Published',
     statusFailed: 'Publish failed',
-    version: 'Version',
-    updated: 'Updated',
     publish: 'Publish',
     publishNote: 'Publish note',
     publishNotePh: 'What changed in this publish (optional)',
@@ -298,13 +268,9 @@ export const enUS = {
     blank: 'Start blank',
     chooseConn: 'Choose data source',
     chooseTable: 'Choose table',
-    generate: 'Generate draft',
-    generating: 'Generating...',
     editor: {
       basic: 'Basics',
-      formMode: 'Form mode',
       yamlMode: 'YAML source',
-      sql: 'SQL (source table / subquery)',
       dimensions: 'Dimensions',
       measures: 'Measures',
       joins: 'Joins',
@@ -333,11 +299,8 @@ export const enUS = {
       saved: 'Saved',
       preview: 'Data preview',
       previewRun: 'Run',
-      previewEmpty: 'Pick measures/dimensions, then run',
       previewPublishFirst: 'Not published yet; publish to preview',
       previewNoData: '(no data)',
-      denied: 'Permission denied',
-      needSaveFirst: 'Save the draft first'
     }
   },
   group: {
@@ -378,23 +341,6 @@ export const enUS = {
     selectModelsDesc: 'Only published models are listed; queries are restricted to them at runtime',
     runtimeHintTitle: 'Data permissions',
     runtimeHint: 'What a session user can see is still governed by data groups; the orchestration scope intersects with data permissions',
-    import: {
-      toggle: 'Import from JSON',
-      hint: 'Paste an action config JSON to auto-fill the form; nothing is submitted until you press save.',
-      editOverwriteHint: 'Parsing in edit mode overwrites the form below.',
-      parse: 'Parse & fill',
-      copyJson: 'Copy JSON',
-      errors: {
-        empty: 'Paste the JSON first',
-        invalidJson: 'Invalid JSON — check the syntax',
-        noAction: 'Expected a single action config object (see the example)',
-        unsupportedBackend: 'Only webhook-type backends are supported'
-      },
-      toasts: {
-        filled: 'Parsed into the form — review and save',
-        copied: 'Copied to clipboard'
-      }
-    }
   },
   audit: { title: 'Audit log', action: 'Action', target: 'Target', user: 'User', time: 'Time' },
   action: {
@@ -405,12 +351,9 @@ export const enUS = {
     sectionWebhook: 'Webhook',
     delete: 'Delete Action',
     deleteConfirm: 'This cannot be undone; agents using this action will lose access',
-    save: 'Save',
     saved: 'Saved',
     deleted: 'Deleted',
-    active: 'Active',
     empty: 'No actions yet. Create one so agents can execute business operations',
-    noDescription: 'No description',
     name: 'Slug',
     nameHint: 'Lowercase letters, digits, underscores; used as the action_run parameter',
     nameError: 'Slug must start with a letter and contain only lowercase letters, digits, underscores',
@@ -440,6 +383,27 @@ export const enUS = {
     secretKeepHint: 'Leave empty to keep the stored secret',
     allowedGroups: 'Allowed Data Groups',
     groupsHint: 'Select groups that may run this action',
+    testRun: 'Test Run',
+    testRunHint: 'Calls the saved webhook once with empty inputs through the full validation chain; save your changes first',
+    testRunNeedSave: 'Save the action before test-running it',
+    testRunEmpty: '(empty response)',
+    import: {
+      toggle: 'Import from JSON',
+      hint: 'Paste an action config JSON to auto-fill the form; nothing is submitted until you press save.',
+      editOverwriteHint: 'Parsing in edit mode overwrites the form below.',
+      parse: 'Parse & fill',
+      copyJson: 'Copy JSON',
+      errors: {
+        empty: 'Paste the JSON first',
+        invalidJson: 'Invalid JSON — check the syntax',
+        noAction: 'Expected a single action config object (see the example)',
+        unsupportedBackend: 'Only webhook-type backends are supported'
+      },
+      toasts: {
+        filled: 'Parsed into the form — review and save',
+        copied: 'Copied to clipboard'
+      }
+    }
   }
 }
 
@@ -450,11 +414,8 @@ export const ruRU = {
   info: {
     cubeReady: 'Сервис Cube работает',
     cubeDown: 'Сервис Cube недоступен',
-    guidedTypes: 'Управляемые источники',
     noConnection: 'Источников данных пока нет. Сначала добавьте подключение к базе в разделе «Источники данных».',
-    denied: 'Роль только для чтения: доступны просмотр моделей и данных, без редактирования',
     subtitle: 'Настройка подключений, семантических моделей и прав доступа к данным',
-    modelGroup: 'Все модели'
   },
   tabs: { models: 'Модели', connections: 'Источники данных', groups: 'Группы данных', actions: 'Actions' },
   conn: {
@@ -476,7 +437,6 @@ export const ruRU = {
     extraHint: 'напр. {"sslmode": "require"} — передаются драйверу Cube как есть',
     test: 'Проверить подключение',
     testSaved: 'Проверить сохранённое подключение',
-    testing: 'Проверка...',
     testOk: 'Подключено ({ms}мс)',
     testFail: 'Не удалось подключиться',
     delete: 'Удалить',
@@ -484,29 +444,21 @@ export const ruRU = {
     deleteBlocked: 'На источник ссылаются модели',
     saved: 'Сохранено',
     empty: 'Источников данных пока нет',
-    noDescription: 'Нет описания',
     latency: '{ms}мс'
   },
   model: {
     add: 'Новая модель',
     empty: 'Моделей пока нет. Сначала добавьте источник данных, затем создайте черновик из таблицы или с нуля.',
     noDescription: 'Нет описания',
-    groupCount: 'Групп: {n}',
     emptyFavorites: 'Избранных моделей пока нет — наведите на карточку и нажмите звезду',
     emptyRecents: 'Недавно просмотренных моделей нет',
     name: 'Идентификатор модели (slug)',
     titleField: 'Отображаемое имя',
     description: 'Описание (для агента: когда использовать модель, семантика полей)',
-    kind: 'Тип',
-    kindCube: 'cube',
-    kindView: 'view (правка YAML)',
     connection: 'Источник данных',
-    status: 'Статус',
     statusDraft: 'Черновик',
     statusPublished: 'Опубликовано',
     statusFailed: 'Ошибка публикации',
-    version: 'Версия',
-    updated: 'Обновлено',
     publish: 'Опубликовать',
     publishNote: 'Примечание к публикации',
     publishNotePh: 'Что изменилось в этой публикации (необязательно)',
@@ -522,13 +474,9 @@ export const ruRU = {
     blank: 'Начать с нуля',
     chooseConn: 'Выберите источник данных',
     chooseTable: 'Выберите таблицу',
-    generate: 'Создать черновик',
-    generating: 'Генерация...',
     editor: {
       basic: 'Основное',
-      formMode: 'Форма',
       yamlMode: 'YAML-источник',
-      sql: 'SQL (исходная таблица / подзапрос)',
       dimensions: 'Измерения',
       measures: 'Меры',
       joins: 'Связи',
@@ -557,11 +505,8 @@ export const ruRU = {
       saved: 'Сохранено',
       preview: 'Предпросмотр данных',
       previewRun: 'Запрос',
-      previewEmpty: 'Выберите меры/измерения и выполните запрос',
       previewPublishFirst: 'Модель не опубликована; опубликуйте для предпросмотра',
       previewNoData: '(нет данных)',
-      denied: 'Недостаточно прав',
-      needSaveFirst: 'Сначала сохраните черновик'
     }
   },
   group: {
@@ -602,23 +547,6 @@ export const ruRU = {
     selectModelsDesc: 'В списке только опубликованные модели; запросы ограничены ими во время выполнения',
     runtimeHintTitle: 'Права доступа к данным',
     runtimeHint: 'Видимость для пользователя сессии по-прежнему определяется группами данных; набор моделей пересекается с правами доступа',
-    import: {
-      toggle: 'Импорт из JSON',
-      hint: 'Вставьте JSON конфигурации действия — форма заполнится автоматически; ничего не отправляется, пока вы не нажмёте «Сохранить».',
-      editOverwriteHint: 'В режиме редактирования разбор перезапишет значения формы ниже.',
-      parse: 'Разобрать и заполнить',
-      copyJson: 'Скопировать JSON',
-      errors: {
-        empty: 'Сначала вставьте JSON',
-        invalidJson: 'Некорректный JSON — проверьте синтаксис',
-        noAction: 'Ожидается объект конфигурации одного действия (см. пример)',
-        unsupportedBackend: 'Поддерживается только backend типа webhook'
-      },
-      toasts: {
-        filled: 'Разобрано и заполнено в форму — проверьте и сохраните',
-        copied: 'Скопировано в буфер обмена'
-      }
-    }
   },
   audit: { title: 'Журнал аудита', action: 'Действие', target: 'Объект', user: 'Пользователь', time: 'Время' },
   action: {
@@ -629,12 +557,9 @@ export const ruRU = {
     sectionWebhook: 'Webhook',
     delete: 'Удалить действие',
     deleteConfirm: 'Действие нельзя отменить; агенты потеряют к нему доступ',
-    save: 'Сохранить',
     saved: 'Сохранено',
     deleted: 'Удалено',
-    active: 'Активно',
     empty: 'Действий пока нет. Создайте одно, чтобы агенты могли выполнять операции',
-    noDescription: 'Нет описания',
     name: 'Идентификатор (slug)',
     nameHint: 'Строчные буквы, цифры, подчёркивания; параметр action для action_run',
     nameError: 'Идентификатор должен начинаться с буквы и содержать только строчные буквы, цифры, подчёркивания',
@@ -664,6 +589,27 @@ export const ruRU = {
     secretKeepHint: 'Оставьте пустым, чтобы сохранить текущий ключ',
     allowedGroups: 'Разрешённые группы данных',
     groupsHint: 'Выберите группы, которым разрешено выполнять действие',
+    testRun: 'Тестовый запуск',
+    testRunHint: 'Один реальный вызов сохранённого webhook с пустыми параметрами через полную цепочку проверок; сначала сохраните изменения',
+    testRunNeedSave: 'Сохраните действие перед пробным запуском',
+    testRunEmpty: '(пустой ответ)',
+    import: {
+      toggle: 'Импорт из JSON',
+      hint: 'Вставьте JSON конфигурации действия — форма заполнится автоматически; ничего не отправляется, пока вы не нажмёте «Сохранить».',
+      editOverwriteHint: 'В режиме редактирования разбор перезапишет значения формы ниже.',
+      parse: 'Разобрать и заполнить',
+      copyJson: 'Скопировать JSON',
+      errors: {
+        empty: 'Сначала вставьте JSON',
+        invalidJson: 'Некорректный JSON — проверьте синтаксис',
+        noAction: 'Ожидается объект конфигурации одного действия (см. пример)',
+        unsupportedBackend: 'Поддерживается только backend типа webhook'
+      },
+      toasts: {
+        filled: 'Разобрано и заполнено в форму — проверьте и сохраните',
+        copied: 'Скопировано в буфер обмена'
+      }
+    }
   }
 }
 
@@ -672,11 +618,8 @@ export const jaJP = {
   info: {
     cubeReady: 'Cube サービスは正常です',
     cubeDown: 'Cube サービスに接続できません',
-    guidedTypes: 'ガイド付きデータソース',
     noConnection: 'データソースが未登録です。まず「データソース」で DB 接続を追加してください。',
-    denied: '閲覧のみのロールです。モデルとデータの表示のみ可能です',
     subtitle: 'DB 接続・セマンティックモデル・データ参照権限を管理します',
-    modelGroup: 'すべてのモデル'
   },
   tabs: { models: 'モデル', connections: 'データソース', groups: 'データグループ', actions: 'Actions' },
   conn: {
@@ -698,7 +641,6 @@ export const jaJP = {
     extraHint: '例: {"sslmode": "require"} — Cube ドライバにそのまま渡されます',
     test: '接続テスト',
     testSaved: '保存済み接続をテスト',
-    testing: 'テスト中...',
     testOk: '接続成功 ({ms}ms)',
     testFail: '接続失敗',
     delete: '削除',
@@ -706,29 +648,21 @@ export const jaJP = {
     deleteBlocked: 'モデルから参照されているため削除できません',
     saved: '保存しました',
     empty: 'データソースがありません',
-    noDescription: '説明なし',
     latency: '{ms}ms'
   },
   model: {
     add: 'モデルを新規作成',
     empty: 'モデルがありません。先にデータソースを追加し、テーブルから生成するか空白から始めてください。',
     noDescription: '説明なし',
-    groupCount: 'データグループ {n} 件',
     emptyFavorites: 'お気に入りのモデルはまだありません。カードにホバーして星をクリックしてください',
     emptyRecents: '最近閲覧したモデルはありません',
     name: 'モデル名 (slug)',
     titleField: '表示名',
     description: '説明 (エージェント向け: いつこのモデルを使うか、項目の意味)',
-    kind: '種別',
-    kindCube: 'cube',
-    kindView: 'view (YAML 編集)',
     connection: 'データソース',
-    status: 'ステータス',
     statusDraft: '下書き',
     statusPublished: '公開済み',
     statusFailed: '公開失敗',
-    version: 'バージョン',
-    updated: '更新日時',
     publish: '公開',
     publishNote: '公開メモ',
     publishNotePh: '今回の公開での変更点 (任意)',
@@ -744,13 +678,9 @@ export const jaJP = {
     blank: '空白から作成',
     chooseConn: 'データソースを選択',
     chooseTable: 'テーブルを選択',
-    generate: '下書きを生成',
-    generating: '生成中...',
     editor: {
       basic: '基本情報',
-      formMode: 'フォームモード',
       yamlMode: 'YAML ソース',
-      sql: 'SQL (元テーブル/サブクエリ)',
       dimensions: 'ディメンション',
       measures: 'メジャー',
       joins: '結合 (joins)',
@@ -779,11 +709,8 @@ export const jaJP = {
       saved: '保存しました',
       preview: 'データプレビュー',
       previewRun: 'クエリ',
-      previewEmpty: 'メジャー/ディメンションを選択して実行',
       previewPublishFirst: '未公開です。公開するとプレビューできます',
       previewNoData: '(データなし)',
-      denied: '権限がありません',
-      needSaveFirst: '先に下書きを保存してください'
     }
   },
   group: {
@@ -824,23 +751,6 @@ export const jaJP = {
     selectModelsDesc: '公開済みモデルのみ表示。実行時のクエリはこれらに制限されます',
     runtimeHintTitle: 'データ権限',
     runtimeHint: 'セッションユーザーの可視範囲はデータグループが最終決定します。編成範囲とデータ権限の積集合が適用されます',
-    import: {
-      toggle: 'JSON からインポート',
-      hint: 'アクション設定の JSON を貼り付けるとフォームに自動反映されます。保存ボタンを押すまで送信されません。',
-      editOverwriteHint: '編集モードで解析すると、下のフォームの内容が上書きされます。',
-      parse: '解析して反映',
-      copyJson: 'JSON をコピー',
-      errors: {
-        empty: '先に JSON を貼り付けてください',
-        invalidJson: 'JSON の解析に失敗しました。書式を確認してください',
-        noAction: '単一のアクション設定オブジェクトが必要です (入力欄の例を参照)',
-        unsupportedBackend: 'webhook タイプの backend のみ対応しています'
-      },
-      toasts: {
-        filled: 'フォームに反映しました。確認して保存してください',
-        copied: 'クリップボードにコピーしました'
-      }
-    }
   },
   audit: { title: '監査ログ', action: '操作', target: '対象', user: 'ユーザー', time: '日時' },
   action: {
@@ -851,12 +761,9 @@ export const jaJP = {
     sectionWebhook: 'Webhook 設定',
     delete: 'アクションを削除',
     deleteConfirm: '削除は元に戻せません。このアクションを使用するエージェントはアクセスできなくなります',
-    save: '保存',
     saved: '保存しました',
     deleted: '削除しました',
-    active: '有効',
     empty: 'アクションがまだありません。作成するとエージェントが業務操作を実行できます',
-    noDescription: '説明なし',
     name: '識別子 (slug)',
     nameHint: '小文字英字・数字・アンダースコア。action_run の action パラメータとして使用',
     nameError: '識別子は英字で始まり、小文字英字・数字・アンダースコアのみ使用できます',
@@ -886,6 +793,27 @@ export const jaJP = {
     secretKeepHint: '空欄の場合は保存済みのキーを維持します',
     allowedGroups: '実行を許可するデータグループ',
     groupsHint: '実行を許可するグループを選択',
+    testRun: 'テスト実行',
+    testRunHint: '保存済みの設定で Webhook を 1 回実際に呼び出します (空の入力, 完全な検証チェーン)。変更は先に保存してください',
+    testRunNeedSave: 'テスト実行の前に保存してください',
+    testRunEmpty: '(空のレスポンス)',
+    import: {
+      toggle: 'JSON からインポート',
+      hint: 'アクション設定の JSON を貼り付けるとフォームに自動反映されます。保存ボタンを押すまで送信されません。',
+      editOverwriteHint: '編集モードで解析すると、下のフォームの内容が上書きされます。',
+      parse: '解析して反映',
+      copyJson: 'JSON をコピー',
+      errors: {
+        empty: '先に JSON を貼り付けてください',
+        invalidJson: 'JSON の解析に失敗しました。書式を確認してください',
+        noAction: '単一のアクション設定オブジェクトが必要です (入力欄の例を参照)',
+        unsupportedBackend: 'webhook タイプの backend のみ対応しています'
+      },
+      toasts: {
+        filled: 'フォームに反映しました。確認して保存してください',
+        copied: 'クリップボードにコピーしました'
+      }
+    }
   }
 }
 
@@ -894,11 +822,8 @@ export const koKR = {
   info: {
     cubeReady: 'Cube 서비스가 정상입니다',
     cubeDown: 'Cube 서비스에 연결할 수 없습니다',
-    guidedTypes: '가이드형 데이터 소스',
     noConnection: '데이터 소스가 없습니다. 먼저 「데이터 소스」에서 DB 연결을 추가하세요.',
-    denied: '읽기 전용 역할입니다. 모델과 데이터 조회만 가능합니다',
     subtitle: 'DB 연결, 시맨틱 모델, 데이터 조회 권한을 관리합니다',
-    modelGroup: '전체 모델'
   },
   tabs: { models: '모델', connections: '데이터 소스', groups: '데이터 그룹', actions: 'Actions' },
   conn: {
@@ -920,7 +845,6 @@ export const koKR = {
     extraHint: '예: {"sslmode": "require"} — Cube 드라이버에 그대로 전달됩니다',
     test: '연결 테스트',
     testSaved: '저장된 연결 테스트',
-    testing: '테스트 중...',
     testOk: '연결 성공 ({ms}ms)',
     testFail: '연결 실패',
     delete: '삭제',
@@ -928,29 +852,21 @@ export const koKR = {
     deleteBlocked: '모델이 참조 중이라 삭제할 수 없습니다',
     saved: '저장되었습니다',
     empty: '데이터 소스가 없습니다',
-    noDescription: '설명 없음',
     latency: '{ms}ms'
   },
   model: {
     add: '새 모델',
     empty: '모델이 없습니다. 먼저 데이터 소스를 추가한 뒤 테이블에서 생성하거나 빈 상태로 시작하세요.',
     noDescription: '설명 없음',
-    groupCount: '데이터 그룹 {n}개',
     emptyFavorites: '즐겨찾기한 모델이 없습니다. 카드에 마우스를 올리고 별표를 누르세요',
     emptyRecents: '최근에 본 모델이 없습니다',
     name: '모델명 (slug)',
     titleField: '표시 이름',
     description: '설명 (에이전트용: 이 모델을 언제 쓰는지, 필드 의미)',
-    kind: '유형',
-    kindCube: 'cube',
-    kindView: 'view (YAML 편집)',
     connection: '데이터 소스',
-    status: '상태',
     statusDraft: '초안',
     statusPublished: '게시됨',
     statusFailed: '게시 실패',
-    version: '버전',
-    updated: '업데이트 시각',
     publish: '게시',
     publishNote: '게시 메모',
     publishNotePh: '이번 게시에서 변경된 내용 (선택)',
@@ -966,13 +882,9 @@ export const koKR = {
     blank: '빈 상태로 시작',
     chooseConn: '데이터 소스 선택',
     chooseTable: '테이블 선택',
-    generate: '초안 생성',
-    generating: '생성 중...',
     editor: {
       basic: '기본 정보',
-      formMode: '폼 모드',
       yamlMode: 'YAML 소스',
-      sql: 'SQL (원본 테이블/서브쿼리)',
       dimensions: '차원',
       measures: '측정값',
       joins: '조인',
@@ -1001,11 +913,8 @@ export const koKR = {
       saved: '저장되었습니다',
       preview: '데이터 미리보기',
       previewRun: '조회',
-      previewEmpty: '측정값/차원을 선택한 뒤 조회하세요',
       previewPublishFirst: '아직 게시되지 않았습니다. 게시 후 미리보기할 수 있습니다',
       previewNoData: '(데이터 없음)',
-      denied: '권한이 없습니다',
-      needSaveFirst: '먼저 초안을 저장하세요'
     }
   },
   group: {
@@ -1046,23 +955,6 @@ export const koKR = {
     selectModelsDesc: '게시된 모델만 표시됩니다. 실행 시 조회가 이 모델들로 제한됩니다',
     runtimeHintTitle: '데이터 권한',
     runtimeHint: '세션 사용자의 가시 범위는 데이터 그룹이 최종 결정합니다. 편성 범위와 데이터 권한의 교집합이 적용됩니다',
-    import: {
-      toggle: 'JSON에서 가져오기',
-      hint: '액션 설정 JSON을 붙여넣으면 폼이 자동으로 채워집니다. 저장 버튼을 누를 때까지 전송되지 않습니다.',
-      editOverwriteHint: '편집 모드에서 파싱하면 아래 폼 내용이 덮어써집니다.',
-      parse: '파싱 후 채우기',
-      copyJson: 'JSON 복사',
-      errors: {
-        empty: '먼저 JSON을 붙여넣으세요',
-        invalidJson: '잘못된 JSON입니다. 형식을 확인하세요',
-        noAction: '단일 액션 설정 객체가 필요합니다 (입력창의 예시 참조)',
-        unsupportedBackend: 'webhook 타입 백엔드만 지원합니다'
-      },
-      toasts: {
-        filled: '폼에 반영했습니다. 확인 후 저장하세요',
-        copied: '클립보드에 복사했습니다'
-      }
-    }
   },
   audit: { title: '감사 로그', action: '작업', target: '대상', user: '사용자', time: '시각' },
   action: {
@@ -1073,12 +965,9 @@ export const koKR = {
     sectionWebhook: 'Webhook 설정',
     delete: '작업 삭제',
     deleteConfirm: '되돌릴 수 없습니다. 이 작업을 사용하던 에이전트는 더 이상 접근할 수 없습니다',
-    save: '저장',
     saved: '저장됨',
     deleted: '삭제됨',
-    active: '활성',
     empty: '아직 작업이 없습니다. 하나 만들면 에이전트가 비즈니스 작업을 실행할 수 있습니다',
-    noDescription: '설명 없음',
     name: '식별자 (slug)',
     nameHint: '소문자/숫자/밑줄, 영문자로 시작. action_run의 action 파라미터로 사용',
     nameError: '식별자는 영문자로 시작하고 소문자, 숫자, 밑줄만 포함해야 합니다',
@@ -1108,5 +997,26 @@ export const koKR = {
     secretKeepHint: '비워두면 저장된 키를 유지합니다',
     allowedGroups: '실행 허용 데이터 그룹',
     groupsHint: '실행을 허용할 그룹 선택',
+    testRun: '테스트 실행',
+    testRunHint: '저장된 설정으로 webhook을 한 번 실제 호출합니다 (빈 입력, 전체 검증 체인). 변경 사항은 먼저 저장하세요',
+    testRunNeedSave: '테스트 실행 전에 저장하세요',
+    testRunEmpty: '(빈 응답)',
+    import: {
+      toggle: 'JSON에서 가져오기',
+      hint: '액션 설정 JSON을 붙여넣으면 폼이 자동으로 채워집니다. 저장 버튼을 누를 때까지 전송되지 않습니다.',
+      editOverwriteHint: '편집 모드에서 파싱하면 아래 폼 내용이 덮어써집니다.',
+      parse: '파싱 후 채우기',
+      copyJson: 'JSON 복사',
+      errors: {
+        empty: '먼저 JSON을 붙여넣으세요',
+        invalidJson: '잘못된 JSON입니다. 형식을 확인하세요',
+        noAction: '단일 액션 설정 객체가 필요합니다 (입력창의 예시 참조)',
+        unsupportedBackend: 'webhook 타입 백엔드만 지원합니다'
+      },
+      toasts: {
+        filled: '폼에 반영했습니다. 확인 후 저장하세요',
+        copied: '클립보드에 복사했습니다'
+      }
+    }
   }
 }
