@@ -326,8 +326,9 @@ func TestAuditRecordsPublish(t *testing.T) {
 	assert.True(t, found, "publish audit record missing")
 }
 
-// 启动对账: 以 DB 为准重建带租户前缀的模型文件, 清掉旧部署器格式遗留的
-// 无前缀文件 (与带前缀文件同名立方体会让 Cube 编译报 duplicate cube name)。
+// 启动对账: 以 DB 为准重建带租户前缀的模型文件; 只清掉与带前缀部署同名
+// 冲突的旧格式无前缀文件 (duplicate cube name), 其余文件不动 —
+// publish_failed 模型的文件仍被其他已发布模型的 join 引用, 是必需的。
 func TestReconcileDeployedFiles(t *testing.T) {
 	e, _ := newTestEngine(t)
 	ctx := context.Background()
@@ -338,14 +339,21 @@ func TestReconcileDeployedFiles(t *testing.T) {
 		Status:        ModelStatusPublished,
 		PublishedYAML: "cubes:\n  - name: orders\n",
 	}).Error)
+	require.NoError(t, e.repo.db.Create(&SemanticModel{
+		TenantID:  1,
+		Name:      "kb_stats",
+		Status:    ModelStatusPublishFailed,
+		DraftYAML: "cubes:\n  - name: kb_stats\n",
+	}).Error)
 
 	auto := filepath.Join(e.cfg.ModelDir, "auto")
 	require.NoError(t, os.MkdirAll(auto, 0o755))
 	write := func(name, content string) {
 		require.NoError(t, os.WriteFile(filepath.Join(auto, name), []byte(content), 0o644))
 	}
-	write("orders.yaml", "cubes: [{name: orders}]") // 旧格式遗留
-	write("ghost.yaml", "cubes: [{name: ghost}]")   // 意外文件
+	write("orders.yaml", "cubes: [{name: orders}]")     // 旧格式遗留 — 与 t1_orders 冲突
+	write("kb_stats.yaml", "cubes: [{name: kb_stats}]") // publish_failed 模型遗留 — 无冲突, 被引用
+	write("ghost.yaml", "cubes: [{name: ghost}]")       // 意外文件 — 无冲突
 
 	require.NoError(t, e.ReconcileDeployedFiles(ctx))
 
@@ -354,7 +362,9 @@ func TestReconcileDeployedFiles(t *testing.T) {
 	assert.Equal(t, "cubes:\n  - name: orders\n", string(b))
 
 	_, err = os.Stat(filepath.Join(auto, "orders.yaml"))
-	assert.True(t, os.IsNotExist(err), "legacy file should be removed")
+	assert.True(t, os.IsNotExist(err), "colliding legacy file should be removed")
+	_, err = os.Stat(filepath.Join(auto, "kb_stats.yaml"))
+	assert.NoError(t, err, "publish_failed model's file is load-bearing, keep it")
 	_, err = os.Stat(filepath.Join(auto, "ghost.yaml"))
-	assert.True(t, os.IsNotExist(err), "unexpected file should be removed")
+	assert.NoError(t, err, "non-colliding files are left alone")
 }

@@ -903,26 +903,27 @@ func (e *Engine) Rollback(
 
 // ReconcileDeployedFiles heals the auto/ model directory against the DB at
 // startup: every published model is re-deployed under its tenant-prefixed
-// filename from the PublishedYAML snapshot, and any other file in auto/ is
-// removed. Older deployer formats left unprefixed files behind; alongside
-// their prefixed replacements they define the same cube twice, which fails
-// Cube's compile ("duplicate cube name") for every caller.
+// filename from the PublishedYAML snapshot, and legacy unprefixed files
+// colliding with those deployments are removed (both define the same cube,
+// which fails Cube's compile with "duplicate cube name" for every caller).
+// Files without a prefixed twin are left alone — a publish_failed model's
+// file can still be referenced by joins in other published models.
 func (e *Engine) ReconcileDeployedFiles(ctx context.Context) error {
 	models, err := e.repo.ListPublishedModelsAllTenants(ctx)
 	if err != nil {
 		return err
 	}
-	keep := make(map[string]bool, len(models))
+	legacyTwins := make(map[string]bool, len(models))
 	for _, m := range models {
 		if m.PublishedYAML == "" {
-			continue // nothing to deploy from; stale file is cleaned below
+			continue // nothing to deploy from; cannot reconcile this model
 		}
 		if err := e.deployer.PublishModel(m.TenantID, m.Name, m.PublishedYAML); err != nil {
 			return fmt.Errorf("redeploy model %s: %w", m.Name, err)
 		}
-		keep[e.deployer.tenantFile(m.TenantID, m.Name)] = true
+		legacyTwins[m.Name+".yaml"] = true
 	}
-	return e.deployer.CleanupAutoDir(keep)
+	return e.deployer.CleanupLegacyAutoFiles(legacyTwins)
 }
 
 // ---- query paths (preview + agent tools) ----
