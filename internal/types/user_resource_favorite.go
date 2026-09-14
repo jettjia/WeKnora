@@ -8,6 +8,8 @@ import "time"
 const (
 	ResourceTypeKB    = "kb"
 	ResourceTypeAgent = "agent"
+	// ResourceTypeAutomation: 自动化任务 (自动化模块)。
+	ResourceTypeAutomation = "automation"
 )
 
 // UserResourceFavorite is a per-(user, tenant) star on a single resource.
@@ -33,7 +35,7 @@ func (UserResourceFavorite) TableName() string {
 // the table and break the frontend's segmented view).
 func IsValidFavoriteResourceType(t string) bool {
 	switch t {
-	case ResourceTypeKB, ResourceTypeAgent:
+	case ResourceTypeKB, ResourceTypeAgent, ResourceTypeAutomation:
 		return true
 	default:
 		return false

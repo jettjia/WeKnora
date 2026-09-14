@@ -1,82 +1,102 @@
 <template>
-  <div class="automations-page">
-    <div class="header">
-      <div class="header-title">
-        <h2>{{ t('automation.list.title') }}</h2>
-        <p class="header-subtitle">{{ t('automation.list.subtitle') }}</p>
+  <div class="automations-container">
+    <ListSpaceSidebar
+      v-if="!authStore.isLiteMode"
+      v-model="spaceSelection"
+      :count-all="automations.length"
+      :count-favorites="favoritesCount"
+      :count-recents="recentsCount"
+      :count-mine="mineCount"
+      show-favorites
+      show-recents
+    />
+    <div class="automations-page">
+      <div class="header">
+        <div class="header-title">
+          <h2>{{ t('automation.list.title') }}</h2>
+          <p class="header-subtitle">{{ t('automation.list.subtitle') }}</p>
+        </div>
+        <t-button v-if="canManage" theme="primary" @click="openCreate">
+          <template #icon><t-icon name="add" /></template>
+          {{ t('automation.list.add') }}
+        </t-button>
       </div>
-      <t-button v-if="canManage" theme="primary" @click="openCreate">
-        <template #icon><t-icon name="add" /></template>
-        {{ t('automation.list.add') }}
-      </t-button>
-    </div>
 
-    <div v-if="automations.length" class="card-grid">
-      <div v-for="a in automations" :key="a.id" class="kb-style-card" @click="openEdit(a)">
-        <div class="card-header">
-          <span class="card-title" :title="a.name">
-            <span class="card-title-text">{{ a.title || a.name }}</span>
-            <span class="card-slug">{{ a.name }}</span>
-          </span>
-          <div class="header-actions">
-            <t-switch :value="a.enabled" size="small" @click.stop @change="(v: unknown) => toggleEnabled(a, !!v)" />
-            <t-popup overlay-class-name="card-more-popup" trigger="click" destroy-on-close placement="bottom-right">
-              <div class="more-wrap" @click.stop>
-                <img class="more-icon" src="@/assets/img/more.png" alt="" />
-              </div>
-              <template #content>
-                <div class="popup-menu" @click.stop>
-                  <div v-if="canManage" class="popup-menu-item" @click.stop="runNow(a)">
-                    <t-icon class="menu-icon" name="play-circle" />
-                    <span>{{ t('automation.run.runNow') }}</span>
-                  </div>
-                  <div class="popup-menu-item" @click.stop="openRuns(a)">
-                    <t-icon class="menu-icon" name="history" />
-                    <span>{{ t('automation.run.history') }}</span>
-                  </div>
-                  <div v-if="canManage" class="popup-menu-item" @click.stop="openEdit(a)">
-                    <t-icon class="menu-icon" name="edit" />
-                    <span>{{ t('automation.drawer.edit') }}</span>
-                  </div>
-                  <div v-if="canManage" class="popup-menu-item delete" @click.stop="confirmDelete(a)">
-                    <t-icon class="menu-icon" name="delete" />
-                    <span>{{ t('automation.drawer.delete') }}</span>
-                  </div>
+      <div v-if="filteredAutomations.length" class="card-grid">
+        <div v-for="a in filteredAutomations" :key="a.id" class="kb-style-card" @click="openEdit(a)">
+          <div class="card-header">
+            <span class="card-title" :title="a.name">
+              <button type="button" class="kb-favorite-star" :class="{ 'is-favorited': isFavorited(a) }"
+                @click.stop="toggleFavoriteAutomation(a)">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <path :fill="isFavorited(a) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8"
+                    stroke-linejoin="round"
+                    d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" />
+                </svg>
+              </button>
+              <span class="card-title-text">{{ a.title || a.name }}</span>
+              <span class="card-slug">{{ a.name }}</span>
+            </span>
+            <div class="header-actions">
+              <t-switch :value="a.enabled" size="small" @click.stop @change="(v: unknown) => toggleEnabled(a, !!v)" />
+              <t-popup overlay-class-name="card-more-popup" trigger="click" destroy-on-close placement="bottom-right">
+                <div class="more-wrap" @click.stop>
+                  <img class="more-icon" src="@/assets/img/more.png" alt="" />
                 </div>
-              </template>
-            </t-popup>
-          </div>
-        </div>
-
-        <div class="card-content">
-          <div class="card-description">{{ a.description || a.query_template }}</div>
-        </div>
-
-        <div class="card-bottom">
-          <div class="bottom-left">
-            <div class="feature-badge status-badge" :class="lastStatusClass(a)">
-              <t-icon :name="lastStatusIcon(a)" size="14px" />
-              <span class="badge-text">{{ lastStatusLabel(a) }}</span>
+                <template #content>
+                  <div class="popup-menu" @click.stop>
+                    <div v-if="canManage" class="popup-menu-item" @click.stop="runNow(a)">
+                      <t-icon class="menu-icon" name="play-circle" />
+                      <span>{{ t('automation.run.runNow') }}</span>
+                    </div>
+                    <div class="popup-menu-item" @click.stop="openRuns(a)">
+                      <t-icon class="menu-icon" name="history" />
+                      <span>{{ t('automation.run.history') }}</span>
+                    </div>
+                    <div v-if="canManage" class="popup-menu-item" @click.stop="openEdit(a)">
+                      <t-icon class="menu-icon" name="edit" />
+                      <span>{{ t('automation.drawer.edit') }}</span>
+                    </div>
+                    <div v-if="canManage" class="popup-menu-item delete" @click.stop="confirmDelete(a)">
+                      <t-icon class="menu-icon" name="delete" />
+                      <span>{{ t('automation.drawer.delete') }}</span>
+                    </div>
+                  </div>
+                </template>
+              </t-popup>
             </div>
           </div>
-          <div class="bottom-right">
-            <span class="card-time">{{ nextRunLabel(a) }}</span>
+
+          <div class="card-content">
+            <div class="card-description">{{ a.description || a.query_template }}</div>
+          </div>
+
+          <div class="card-bottom">
+            <div class="bottom-left">
+              <div class="feature-badge status-badge" :class="lastStatusClass(a)">
+                <t-icon :name="lastStatusIcon(a)" size="14px" />
+                <span class="badge-text">{{ lastStatusLabel(a) }}</span>
+              </div>
+            </div>
+            <div class="bottom-right">
+              <span class="card-time">{{ nextRunLabel(a) }}</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div v-else class="empty-state">
-      <img class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{ t('automation.list.empty') }}</span>
-      <t-button v-if="canManage" class="empty-state-btn" @click="openCreate">
-        <template #icon><t-icon name="add" /></template>
-        {{ t('automation.list.add') }}
-      </t-button>
-    </div>
+      <div v-else class="empty-state">
+        <img class="empty-img" src="@/assets/img/upload.svg" alt="" />
+        <span class="empty-txt">{{ emptyText }}</span>
+        <t-button v-if="canManage && spaceSelection === 'all'" class="empty-state-btn" @click="openCreate">
+          <template #icon><t-icon name="add" /></template>
+          {{ t('automation.list.add') }}
+        </t-button>
+      </div>
 
-    <AutomationDrawer ref="drawerRef" :agents="agentOptions" @saved="reload" />
-    <RunsDrawer v-model:visible="runsVisible" :automation="runsTarget" />
+      <AutomationDrawer ref="drawerRef" :agents="agentOptions" @saved="reload" />
+      <RunsDrawer v-model:visible="runsVisible" :automation="runsTarget" />
+    </div>
   </div>
 </template>
 
@@ -88,6 +108,8 @@ import { listAutomations, deleteAutomation, updateAutomation, runAutomationNow, 
 import { listAgents } from '@/api/agent'
 import AutomationDrawer from '@/automation/AutomationDrawer.vue'
 import RunsDrawer from '@/automation/RunsDrawer.vue'
+import ListSpaceSidebar from '@/components/ListSpaceSidebar.vue'
+import { useResourcePins } from '@/composables/useResourcePins'
 import { useAuthStore } from '@/stores/auth'
 
 const { t } = useI18n()
@@ -99,7 +121,49 @@ const drawerRef = ref<InstanceType<typeof AutomationDrawer> | null>(null)
 const runsVisible = ref(false)
 const runsTarget = ref<Automation | null>(null)
 
+// 收藏 (服务端) + 最近 (本地), 类型 automation — 与知识库/智能体同款机制
+const pins = useResourcePins()
+const spaceSelection = ref('all')
+
 const canManage = computed(() => authStore.hasRole('contributor'))
+
+const favoritesCount = computed(() => pins.favorites.value.filter(e => e.type === 'automation').length)
+const recentsCount = computed(() => pins.recents.value.filter(e => e.type === 'automation').length)
+const mineCount = computed(() => automations.value.filter(a => a.created_by === authStore.currentUserId).length)
+const isFavorited = (a: Automation) => pins.isFavorite('automation', a.id)
+
+async function toggleFavoriteAutomation(a: Automation) {
+  try {
+    await pins.toggleFavorite('automation', a.id)
+  } catch (e: any) {
+    MessagePlugin.error(e?.response?.data?.error || 'favorite failed')
+  }
+}
+
+// 侧栏视图过滤: 全部 / 收藏 / 最近 / 本空间(我创建的)
+const filteredAutomations = computed(() => {
+  const sel = spaceSelection.value
+  if (sel === 'favorites') {
+    const ids = new Set(pins.favorites.value.filter(e => e.type === 'automation').map(e => e.id))
+    return automations.value.filter(a => ids.has(a.id))
+  }
+  if (sel === 'recents') {
+    const ordered = pins.recents.value.filter(e => e.type === 'automation').map(e => e.id)
+    const byId = new Map(automations.value.map(a => [a.id, a]))
+    return ordered.map(id => byId.get(id)).filter(Boolean) as Automation[]
+  }
+  if (sel === 'mine') {
+    return automations.value.filter(a => a.created_by === authStore.currentUserId)
+  }
+  return automations.value
+})
+
+const emptyText = computed(() => {
+  if (spaceSelection.value === 'favorites') return t('automation.list.emptyFavorites')
+  if (spaceSelection.value === 'recents') return t('automation.list.emptyRecents')
+  if (spaceSelection.value === 'mine') return t('automation.list.emptyMine')
+  return t('automation.list.empty')
+})
 
 async function reload() {
   try {
@@ -125,6 +189,7 @@ function openCreate() {
   drawerRef.value?.openCreate()
 }
 function openEdit(a: Automation) {
+  pins.touchRecent('automation', a.id)
   if (!canManage.value) return
   drawerRef.value?.openEdit(a)
 }
@@ -202,8 +267,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.automations-page {
+.automations-container {
   height: 100%;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+.automations-page {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 20px 28px;
@@ -287,6 +361,28 @@ onMounted(() => {
   gap: 6px;
   min-width: 0;
   overflow: hidden;
+}
+.kb-favorite-star {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--td-text-color-placeholder);
+  cursor: pointer;
+  align-self: center;
+  transition: color 0.2s ease, transform 0.15s ease;
+}
+.kb-favorite-star:hover {
+  color: #f5a623;
+  transform: scale(1.1);
+}
+.kb-favorite-star.is-favorited {
+  color: #f5a623;
 }
 .card-title-text {
   font-size: 16px;
