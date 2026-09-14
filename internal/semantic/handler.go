@@ -853,6 +853,60 @@ func (h *Handler) ListGroupMembers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user_ids": ids})
 }
 
+// ShareModel godoc — share a published model to an organization.
+// @Router /semantic/models/{id}/share [POST]
+func (h *Handler) ShareModel(c *gin.Context) {
+	tenant, uid, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	var in struct {
+		OrganizationID string `json:"organization_id"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil || in.OrganizationID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "organization_id is required"})
+		return
+	}
+	share, err := h.engine.ShareModel(c.Request.Context(), uid, tenant, c.Param("id"), in.OrganizationID)
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, share)
+}
+
+// UnshareModel godoc — remove an organization share.
+// @Router /semantic/models/{id}/share/{orgId} [DELETE]
+func (h *Handler) UnshareModel(c *gin.Context) {
+	tenant, uid, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	if err := h.engine.UnshareModel(c.Request.Context(), uid, tenant, c.Param("id"), c.Param("orgId")); err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+// ListModelShares godoc — org shares of one model.
+// @Router /semantic/models/{id}/shares [GET]
+func (h *Handler) ListModelShares(c *gin.Context) {
+	tenant, _, ok := h.tenantOf(c)
+	if !ok {
+		unauthorized(c)
+		return
+	}
+	list, err := h.engine.ListModelShares(c.Request.Context(), tenant, c.Param("id"))
+	if err != nil {
+		h.respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"shares": list})
+}
+
 // MemberCandidates godoc — data-group member picker directory: users of the
 // tenant plus users of workspaces sharing an organization with it (system
 // admins see every workspace user).

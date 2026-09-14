@@ -126,6 +126,9 @@ func registerRoutes(g *gin.RouterGroup, h *Handler, viewer, contributor, admin g
 	g.POST("/models/:id/unpublish", admin, h.UnpublishModel)
 	g.GET("/models/:id/versions", viewer, h.ListVersions)
 	g.POST("/models/:id/rollback", admin, h.RollbackModel)
+	g.POST("/models/:id/share", admin, h.ShareModel)
+	g.DELETE("/models/:id/share/:orgId", admin, h.UnshareModel)
+	g.GET("/models/:id/shares", viewer, h.ListModelShares)
 	g.POST("/models/:id/preview", contributor, h.PreviewModel)
 
 	// data groups

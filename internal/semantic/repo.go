@@ -248,6 +248,61 @@ func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, 
 	return out, err
 }
 
+// ---- model shares (共享给组织) ----
+
+// CreateShare records one model→organization share (idempotent per pair).
+func (r *Repository) CreateShare(ctx context.Context, share *SemanticModelShare) error {
+	return r.db.WithContext(ctx).Create(share).Error
+}
+
+// DeleteShare removes one model→organization share.
+func (r *Repository) DeleteShare(ctx context.Context, tenantID uint64, modelID, orgID string) error {
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND model_id = ? AND organization_id = ?", tenantID, modelID, orgID).
+		Delete(&SemanticModelShare{}).Error
+}
+
+// ListSharesForModel returns the org shares of one model.
+func (r *Repository) ListSharesForModel(ctx context.Context, tenantID uint64, modelID string) ([]*SemanticModelShare, error) {
+	var out []*SemanticModelShare
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND model_id = ?", tenantID, modelID).
+		Order("created_at ASC").Find(&out).Error
+	return out, err
+}
+
+// DeleteSharesForModel removes all shares of one model (model deleted).
+func (r *Repository) DeleteSharesForModel(ctx context.Context, tenantID uint64, modelID string) error {
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND model_id = ?", tenantID, modelID).
+		Delete(&SemanticModelShare{}).Error
+}
+
+// OrgIDsForTenant returns the organization ids the tenant belongs to.
+func (r *Repository) OrgIDsForTenant(ctx context.Context, tenantID uint64) ([]string, error) {
+	var ids []string
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT organization_id FROM organization_tenant_members WHERE tenant_id = ?`,
+		tenantID).Scan(&ids).Error
+	return ids, err
+}
+
+// ShareExistsForOrgs reports whether the model (by cube name) is shared to
+// any of the given organizations.
+func (r *Repository) ShareExistsForOrgs(ctx context.Context, modelName string, orgIDs []string) (bool, error) {
+	if len(orgIDs) == 0 {
+		return false, nil
+	}
+	var found bool
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT EXISTS(
+			SELECT 1 FROM semantic_model_shares s
+			JOIN semantic_models sm ON sm.id = s.model_id
+			WHERE sm.name = ? AND s.organization_id IN ?)`,
+		modelName, orgIDs).Scan(&found).Error
+	return found, err
+}
+
 func (r *Repository) ListGroupMembers(
 	ctx context.Context,
 	tenantID uint64,

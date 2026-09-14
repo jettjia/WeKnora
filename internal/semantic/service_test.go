@@ -84,7 +84,7 @@ func newTestEngine(t *testing.T) (*Engine, *fakeCube) {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&CubeConnection{}, &SemanticModel{}, &SemanticModelVersion{},
-		&DataGroup{}, &DataGroupMember{}, &AuditLog{},
+		&DataGroup{}, &DataGroupMember{}, &AuditLog{}, &SemanticModelShare{},
 	))
 
 	f := newFakeCube(t)

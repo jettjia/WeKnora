@@ -110,6 +110,15 @@ func (e *Engine) SecCtxFor(ctx context.Context, tenantID uint64, userID string) 
 	if admin {
 		groups = append(groups, AdminGroup)
 	}
+	// 共享给本空间所属组织的模型: 注入合成组凭证, Cube accessPolicy
+	// 里的 org-shared 规则据此放行 (共享动作见 ShareModel)。
+	if orgIDs, err := e.repo.OrgIDsForTenant(ctx, tenantID); err == nil {
+		for _, orgID := range orgIDs {
+			groups = append(groups, OrgSharedGroup(orgID))
+		}
+	} else {
+		logger.Warnf(ctx, "[semantic] org ids lookup failed: %v", err)
+	}
 	return cubeclient.SecurityContext{Sub: userID, Groups: groups, TenantID: tenantID}, nil
 }
 
@@ -653,6 +662,9 @@ func (e *Engine) DeleteModel(ctx context.Context, userID string, tenant uint64, 
 			return fmt.Errorf("failed to remove published file: %w", err)
 		}
 	}
+	if err := e.repo.DeleteSharesForModel(ctx, tenant, m.ID); err != nil {
+		logger.Warnf(ctx, "[semantic] share cascade delete failed: %v", err)
+	}
 	if err := e.repo.DeleteModel(ctx, m); err != nil {
 		return err
 	}
@@ -795,6 +807,10 @@ func (e *Engine) Publish(
 		logger.Warnf(ctx, "[semantic] version snapshot failed: %v", err)
 	}
 	e.audit(ctx, tenant, userID, AuditModelPublish, "model:"+m.Name, map[string]interface{}{"version": next})
+	// 重发布不丢共享: 重新合并 org-shared 访问规则
+	if err := e.applySharePolicyRules(ctx, m); err != nil {
+		logger.Warnf(ctx, "[semantic] share policy re-apply failed: %v", err)
+	}
 	return &PublishResult{Status: m.Status, Version: next}, nil
 }
 
@@ -916,15 +932,41 @@ func (e *Engine) filterMetaForUser(
 	for _, g := range sec.Groups {
 		allowed[g] = true
 	}
-	isAdmin := allowed[AdminGroup]
+	return e.FilterMetaForUserWithGroups(ctx, meta, allowed)
+}
+
+// FilterMetaForUserWithGroups is the testable core of filterMetaForUser:
+// visible = system admin ∨ 数据组命中 ∨ 共享给调用方所属组织的模型。
+func (e *Engine) FilterMetaForUserWithGroups(ctx context.Context, meta *cubeclient.MetaResponse, allowed map[string]bool) *cubeclient.MetaResponse {
 	out := make([]cubeclient.MetaCube, 0, len(meta.Cubes))
 	for _, cb := range meta.Cubes {
-		if isAdmin || e.modelAllowsGroup(ctx, cb.Name, allowed) {
+		if allowed[AdminGroup] || e.modelAllowsGroup(ctx, cb.Name, allowed) || e.modelSharedToCaller(ctx, cb.Name, allowed) {
 			out = append(out, cb)
 		}
 	}
 	meta.Cubes = out
 	return meta
+}
+
+// modelSharedToCaller reports whether the model was shared to an
+// organization the caller's workspace belongs to (synthetic groups in the
+// security context carry the org-shared:{orgID} names).
+func (e *Engine) modelSharedToCaller(ctx context.Context, modelName string, allowed map[string]bool) bool {
+	orgIDs := make([]string, 0, len(allowed))
+	for g := range allowed {
+		if orgID, ok := strings.CutPrefix(g, OrgSharedGroupPrefix); ok {
+			orgIDs = append(orgIDs, orgID)
+		}
+	}
+	if len(orgIDs) == 0 {
+		return false
+	}
+	shared, err := e.repo.ShareExistsForOrgs(ctx, modelName, orgIDs)
+	if err != nil {
+		logger.Warnf(ctx, "[semantic] share visibility check failed: %v", err)
+		return false
+	}
+	return shared
 }
 
 // modelAllowsGroup resolves a published model's group policy from the DB.
@@ -1278,6 +1320,127 @@ func (e *Engine) memberGrantAll(ctx context.Context, tenantID uint64, userID str
 		return true, nil
 	}
 	return e.repo.IsTenantAdmin(ctx, tenantID, userID)
+}
+
+// ---- model sharing (共享给组织) ----
+
+// ShareModel shares a published model to one organization: records the
+// share, then rewrites the published accessPolicy with a synthetic
+// org-shared allow rule so recipient-space users pass Cube's gate.
+func (e *Engine) ShareModel(ctx context.Context, userID string, tenant uint64, modelID, orgID string) (*SemanticModelShare, error) {
+	a, err := e.repo.FindModel(ctx, tenant, modelID)
+	if err != nil {
+		return nil, err
+	}
+	if a.Status != ModelStatusPublished {
+		return nil, &ConflictError{Msg: "publish the model before sharing it"}
+	}
+	// 组织关系校验: 本空间必须是该组织的成员 (共享空间治理口径)
+	orgIDs, err := e.repo.OrgIDsForTenant(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	member := false
+	for _, id := range orgIDs {
+		if id == orgID {
+			member = true
+			break
+		}
+	}
+	if !member {
+		return nil, &ConflictError{Msg: "本空间不属于该共享空间, 无法共享"}
+	}
+	share := &SemanticModelShare{
+		TenantID: tenant, ModelID: a.ID, OrganizationID: orgID,
+		SharedByUserID: userID, SourceTenantID: tenant,
+	}
+	existing, err := e.repo.ListSharesForModel(ctx, tenant, a.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, sh := range existing {
+		if sh.OrganizationID == orgID {
+			return nil, &ConflictError{Msg: "该模型已共享给此共享空间"}
+		}
+	}
+	if err := e.repo.CreateShare(ctx, share); err != nil {
+		return nil, err
+	}
+	if err := e.applySharePolicyRules(ctx, a); err != nil {
+		return share, fmt.Errorf("共享已记录, 但策略重写失败: %w", err)
+	}
+	e.audit(ctx, tenant, userID, "model.share", "model:"+a.Name,
+		map[string]interface{}{"organization_id": orgID})
+	return share, nil
+}
+
+// UnshareModel removes the org grant and rewrites the policy.
+func (e *Engine) UnshareModel(ctx context.Context, userID string, tenant uint64, modelID, orgID string) error {
+	a, err := e.repo.FindModel(ctx, tenant, modelID)
+	if err != nil {
+		return err
+	}
+	if err := e.repo.DeleteShare(ctx, tenant, modelID, orgID); err != nil {
+		return err
+	}
+	if err := e.applySharePolicyRules(ctx, a); err != nil {
+		return err
+	}
+	e.audit(ctx, tenant, userID, "model.unshare", "model:"+a.Name,
+		map[string]interface{}{"organization_id": orgID})
+	return nil
+}
+
+// ListModelShares returns the org shares of one model.
+func (e *Engine) ListModelShares(ctx context.Context, tenant uint64, modelID string) ([]*SemanticModelShare, error) {
+	return e.repo.ListSharesForModel(ctx, tenant, modelID)
+}
+
+// applySharePolicyRules rewrites the published model's accessPolicy so it
+// carries one allow rule per current org share (and no stale ones). The
+// file is rewritten atomically via the deployer — Cube hot-reloads.
+func (e *Engine) applySharePolicyRules(ctx context.Context, a *SemanticModel) error {
+	if a.Status != ModelStatusPublished || a.PublishedYAML == "" {
+		return nil
+	}
+	shares, err := e.repo.ListSharesForModel(ctx, a.TenantID, a.ID)
+	if err != nil {
+		return err
+	}
+	doc, err := ParseModelYAML(a.PublishedYAML)
+	if err != nil {
+		return err
+	}
+	if len(doc.Cubes) == 0 {
+		return nil
+	}
+	// 保留既有规则 (default-deny + 数据组 + admin), 剔除过期合成规则后按当前共享重建
+	kept := make([]PolicyRule, 0, len(doc.Cubes[0].AccessPolicy)+len(shares)+1)
+	for _, rule := range doc.Cubes[0].AccessPolicy {
+		if strings.HasPrefix(rule.Group, OrgSharedGroupPrefix) {
+			continue
+		}
+		kept = append(kept, rule)
+	}
+	seen := map[string]bool{}
+	for _, share := range shares {
+		g := OrgSharedGroup(share.OrganizationID)
+		if seen[g] {
+			continue
+		}
+		seen[g] = true
+		kept = append(kept, PolicyRule{Group: g, MemberLevel: &MemberLevel{Includes: "*"}})
+	}
+	doc.Cubes[0].AccessPolicy = kept
+	yamlText, err := GenerateModelYAML(doc)
+	if err != nil {
+		return err
+	}
+	if err := e.deployer.PublishModel(a.TenantID, a.Name, yamlText); err != nil {
+		return err
+	}
+	a.PublishedYAML = yamlText
+	return e.repo.SaveModel(ctx, a)
 }
 
 func (e *Engine) ListAudits(ctx context.Context, tenant uint64, limit int) ([]*AuditLog, error) {
