@@ -60,6 +60,11 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("automation scheduler load failed: %w", err)
 	}
+	if n, err := s.repo.MarkOrphanRunsFailed(ctx); err != nil {
+		logger.Warnf(ctx, "[automation] orphan run sweep failed: %v", err)
+	} else if n > 0 {
+		logger.Warnf(ctx, "[automation] reaped %d orphan run(s) left by a previous process", n)
+	}
 	s.cron.Start()
 	for _, a := range list {
 		s.upsertEntry(a)

@@ -113,6 +113,19 @@ func (r *Runner) HandleRunTask(ctx context.Context, t *asynq.Task) error {
 		logger.Errorf(ctx, "[automation] create run row failed: %v", err)
 		return nil
 	}
+	// Panic guard: whatever blows up below must leave a terminal run status,
+	// never a zombie "running" row (asynq recovers the panic either way).
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.Errorf(ctx, "[automation] run panicked automation=%s: %v", a.ID, rec)
+			finished := time.Now().UTC()
+			run.Status = RunStatusFailed
+			run.Error = fmt.Sprintf("executor panic: %v", rec)
+			run.FinishedAt = &finished
+			run.DurationMs = finished.Sub(now).Milliseconds()
+			_ = r.repo.UpdateRun(context.WithoutCancel(ctx), run)
+		}
+	}()
 
 	status, output, runErr := r.executeRun(ctx, a, run, timeout)
 
@@ -226,19 +239,19 @@ func (r *Runner) executeRun(
 		// shows what happened.
 		assistantMsg.Content = "Automation run failed: " + errString(qaErr)
 		assistantMsg.IsCompleted = true
-		_ = r.messages.UpdateMessage(context.WithoutCancel(ctx), assistantMsg)
+		_ = r.messages.UpdateMessage(context.WithoutCancel(runCtx), assistantMsg)
 		return status, final, qaErr
 	}
 	if evtErr != "" && final == "" {
 		assistantMsg.Content = "Automation run failed: " + evtErr
 		assistantMsg.IsCompleted = true
-		_ = r.messages.UpdateMessage(context.WithoutCancel(ctx), assistantMsg)
+		_ = r.messages.UpdateMessage(context.WithoutCancel(runCtx), assistantMsg)
 		return RunStatusFailed, "", errors.New(evtErr)
 	}
 
 	assistantMsg.Content = final
 	assistantMsg.IsCompleted = true
-	if err := r.messages.UpdateMessage(context.WithoutCancel(ctx), assistantMsg); err != nil {
+	if err := r.messages.UpdateMessage(context.WithoutCancel(runCtx), assistantMsg); err != nil {
 		logger.Warnf(ctx, "[automation] finalize assistant message failed: %v", err)
 	}
 	return RunStatusSuccess, final, nil

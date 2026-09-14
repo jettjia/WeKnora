@@ -114,6 +114,17 @@ func (r *Repository) ListRuns(ctx context.Context, tenantID uint64, automationID
 	return out, err
 }
 
+// MarkOrphanRunsFailed reaps runs left in running/pending by a crashed or
+// restarted process (called at scheduler startup). Returns affected rows.
+func (r *Repository) MarkOrphanRunsFailed(ctx context.Context) (int64, error) {
+	res := r.db.WithContext(ctx).Exec(
+		`UPDATE automation_runs SET status = 'failed',
+		    error = '进程中断, 孤儿运行被回收',
+		    finished_at = NOW()
+		 WHERE status IN ('running', 'pending')`)
+	return res.RowsAffected, res.Error
+}
+
 // LatestRun returns the most recent run of one automation (any status).
 func (r *Repository) LatestRun(ctx context.Context, tenantID uint64, automationID string) (*AutomationRun, error) {
 	var run AutomationRun
