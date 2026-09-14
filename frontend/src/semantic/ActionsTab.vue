@@ -206,6 +206,17 @@
             :placeholder="t('semantic.action.bodyTemplatePlaceholder', { example: bodyExample })" />
           <p class="form-desc">{{ t('semantic.action.bodyTemplateHint') }}</p>
         </div>
+
+        <div class="form-item">
+          <label class="form-label">{{ t('semantic.action.testRun') }}</label>
+          <div>
+            <t-button variant="outline" size="small" :loading="testing" :disabled="!editing" @click="runTest">
+              <template #icon><t-icon name="play-circle" /></template>
+              {{ t('semantic.action.testRun') }}
+            </t-button>
+          </div>
+          <p class="form-desc">{{ editing ? t('semantic.action.testRunHint') : t('semantic.action.testRunNeedSave') }}</p>
+        </div>
       </section>
     </SettingDrawer>
   </div>
@@ -215,7 +226,7 @@
 import { ref, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
-import { createAction, deleteAction, updateAction, type ActionInput, type ActionField, type Precondition, type SemanticAction, type DataGroup } from './api'
+import { createAction, deleteAction, testAction, updateAction, type ActionInput, type ActionField, type Precondition, type SemanticAction, type DataGroup } from './api'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 
 const props = defineProps<{
@@ -502,6 +513,30 @@ function addHeader() {
 
 function removeHeader(idx: number) {
   webhookHeaders.value.splice(idx, 1)
+}
+
+// 试运行: 以已保存的配置真实调用一次 webhook (空入参, 走完整校验链路)。
+// 修改未保存的配置不会体现在试跑里 — 提示文案已说明。
+const testing = ref(false)
+
+async function runTest() {
+  if (!editing.value) return
+  testing.value = true
+  try {
+    const resp = await testAction(editing.value.name, {})
+    DialogPlugin.alert({
+      header: `${t('semantic.action.testRun')} · HTTP ${resp.http_status}`,
+      body: resp.output || t('semantic.action.testRunEmpty'),
+    })
+  } catch (e: any) {
+    DialogPlugin.alert({
+      header: t('semantic.action.testRun'),
+      theme: 'warning',
+      body: e?.response?.data?.error || e?.message || 'test failed',
+    })
+  } finally {
+    testing.value = false
+  }
 }
 
 async function save() {

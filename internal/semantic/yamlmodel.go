@@ -3,7 +3,6 @@ package semantic
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -410,12 +409,3 @@ func Slugify(s string) string {
 	return out
 }
 
-// SortedKeys is a small helper for deterministic error messages.
-func SortedKeys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}

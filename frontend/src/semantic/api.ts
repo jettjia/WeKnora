@@ -42,13 +42,6 @@ export interface TableRef {
   name: string
 }
 
-export interface ColumnSchema {
-  name: string
-  data_type: string
-  primary_key: boolean
-  nullable: boolean
-}
-
 export type ModelStatus = 'draft' | 'published' | 'publish_failed'
 
 export interface SemanticModel {
@@ -153,10 +146,6 @@ export function listConnections() {
   return get<{ connections: ConnectionInfo[] }>('/api/v1/semantic/connections')
 }
 
-export function getConnection(id: string) {
-  return get<ConnectionInfo>(`/api/v1/semantic/connections/${id}`)
-}
-
 export function createConnection(data: ConnectionInput) {
   return post<ConnectionInfo>('/api/v1/semantic/connections', data)
 }
@@ -193,11 +182,6 @@ export function listTables(id: string) {
   return get<{ tables: TableRef[] }>(`/api/v1/semantic/connections/${id}/tables`)
 }
 
-export function listColumns(id: string, schema: string, table: string) {
-  return get<{ columns: ColumnSchema[] }>(
-    `/api/v1/semantic/connections/${id}/columns?schema=${encodeURIComponent(schema)}&table=${encodeURIComponent(table)}`
-  )
-}
 
 export function generateDraft(id: string, schema: string, table: string) {
   return get<{ yaml: string }>(
