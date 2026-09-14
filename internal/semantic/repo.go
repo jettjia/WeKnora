@@ -223,15 +223,62 @@ func (r *Repository) ListGroupMembers(
 	return out, err
 }
 
-// UserGroupNames resolves the data group slugs of one user.
-func (r *Repository) UserGroupNames(ctx context.Context, tenantID uint64, userID string) ([]string, error) {
+// UserGroupNames resolves the data group slugs of one user. Membership is
+// global by user UUID: a workspace-B user granted a workspace-A group (via a
+// shared organization) resolves it from any workspace. What the group
+// unlocks is still gated per model / action by their access policies.
+func (r *Repository) UserGroupNames(ctx context.Context, userID string) ([]string, error) {
 	var names []string
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT g.name FROM semantic_data_groups g
 		JOIN semantic_data_group_members m ON m.group_id = g.id
-		WHERE m.tenant_id = ? AND m.user_id = ? AND g.deleted_at IS NULL`,
-		tenantID, userID).Scan(&names).Error
+		WHERE m.user_id = ? AND g.deleted_at IS NULL`,
+		userID).Scan(&names).Error
 	return names, err
+}
+
+// FilterGrantableMemberIDs splits candidate data-group member ids into
+// grantable and rejected. A user is grantable when they are a member of the
+// tenant itself or of any workspace sharing at least one organization with
+// it (shared-space governance, mirrors agent/KB sharing).
+func (r *Repository) FilterGrantableMemberIDs(ctx context.Context, tenantID uint64, userIDs []string) (grantable []string, rejected []string, err error) {
+	if len(userIDs) == 0 {
+		return []string{}, []string{}, nil
+	}
+	var rows []struct {
+		UserID    string `gorm:"column:user_id"`
+		Direct    int64  `gorm:"column:direct"`
+		OrgShared int64  `gorm:"column:org_shared"`
+	}
+	err = r.db.WithContext(ctx).Raw(`
+		SELECT m.user_id,
+		       MAX(CASE WHEN m.tenant_id = ? THEN 1 ELSE 0 END) AS direct,
+		       MAX(CASE WHEN ot.organization_id IN (
+		           SELECT organization_id FROM organization_tenant_members
+		           WHERE tenant_id = ?
+		       ) THEN 1 ELSE 0 END) AS org_shared
+		FROM tenant_members m
+		LEFT JOIN organization_tenant_members ot ON ot.tenant_id = m.tenant_id
+		WHERE m.user_id IN ?
+		GROUP BY m.user_id`,
+		tenantID, tenantID, userIDs).Scan(&rows).Error
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		byID[row.UserID] = row.Direct == 1 || row.OrgShared == 1
+	}
+	grantable = []string{}
+	rejected = []string{}
+	for _, uid := range userIDs {
+		if byID[uid] {
+			grantable = append(grantable, uid)
+		} else {
+			rejected = append(rejected, uid)
+		}
+	}
+	return grantable, rejected, nil
 }
 
 // IsTenantAdmin checks whether the user has an owner or admin role in the

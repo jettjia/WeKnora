@@ -98,7 +98,7 @@ func (e *Engine) Info(ctx context.Context) Info {
 // SecCtxFor builds the securityContext of a WeKnora user: their data groups
 // plus the implicit admin group for platform admins.
 func (e *Engine) SecCtxFor(ctx context.Context, tenantID uint64, userID string) (cubeclient.SecurityContext, error) {
-	groups, err := e.repo.UserGroupNames(ctx, tenantID, userID)
+	groups, err := e.repo.UserGroupNames(ctx, userID)
 	if err != nil {
 		return cubeclient.SecurityContext{}, err
 	}
@@ -1222,7 +1222,19 @@ func (e *Engine) SetGroupMembers(
 	if err != nil {
 		return err
 	}
-	if err := e.repo.ReplaceGroupMembers(ctx, tenant, g.ID, userIDs); err != nil {
+	// 跨空间授权校验: 被加入者必须是本空间成员, 或与本空间同属一个共享空间
+	grantable, rejected, err := e.repo.FilterGrantableMemberIDs(ctx, tenant, userIDs)
+	if err != nil {
+		return err
+	}
+	if len(rejected) > 0 {
+		return &ConflictError{Msg: fmt.Sprintf(
+			"以下用户不属于本空间或任何共享空间, 无法加入数据组: %s", strings.Join(rejected, ", "))}
+	}
+	if len(grantable) == 0 {
+		return &ConflictError{Msg: "no grantable members in the request"}
+	}
+	if err := e.repo.ReplaceGroupMembers(ctx, tenant, g.ID, grantable); err != nil {
 		return err
 	}
 	e.audit(ctx, tenant, userID, AuditGroupMembers, "group:"+g.Name, map[string]interface{}{"members": len(userIDs)})

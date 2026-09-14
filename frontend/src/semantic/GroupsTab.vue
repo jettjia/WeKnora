@@ -86,7 +86,8 @@
       </t-input>
       <t-checkbox-group v-model="checkedUserIds" class="member-list">
         <div v-for="m in filteredMembers" :key="m.user_id" class="member-row">
-          <t-checkbox :value="m.user_id" :label="`${m.username || m.email} (${m.email})`" />
+          <t-checkbox :value="m.user_id"
+            :label="`${m.username || m.email} (${m.email})${(m as any).tenant_name ? ' · ' + (m as any).tenant_name : ''}`" />
         </div>
         <t-empty v-if="!filteredMembers.length" size="small" :description="t('semantic.group.noMembers')" />
       </t-checkbox-group>
@@ -107,6 +108,7 @@ import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { createGroup, deleteGroup, getGroupUsage, listGroupMembers, setGroupMembers, updateGroup, type DataGroup } from './api'
 import { fetchAllTenantMembers, type TenantMember } from '@/api/tenant/members'
+import { listMyOrganizations, listMembers as listOrgMembers } from '@/api/organization'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 
@@ -238,7 +240,31 @@ async function openMembers(g: DataGroup) {
     fetchAllTenantMembers(tenantId as unknown as number),
     listGroupMembers(g.id)
   ])
-  members.value = allMembers
+
+  // 跨空间成员: 与本空间同属共享空间的空间, 其成员也可加入数据组
+  // (服务端保存时按组织关系校验, 此处仅扩充候选名单)。
+  const combined: (TenantMember & { tenant_name?: string })[] = allMembers.map(m => ({ ...m }))
+  try {
+    const orgsResp = await listMyOrganizations()
+    const orgs = orgsResp.organizations || []
+    const seen = new Set(combined.map(m => m.user_id))
+    for (const org of orgs) {
+      const orgMembers = await listOrgMembers(org.id)
+      for (const om of orgMembers.members || []) {
+        if (seen.has(om.user_id)) continue
+        seen.add(om.user_id)
+        combined.push({
+          user_id: om.user_id,
+          username: om.username || om.email,
+          email: om.email,
+          tenant_name: om.tenant_name
+        } as TenantMember)
+      }
+    }
+  } catch {
+    // 共享空间成员拉取失败不阻塞本空间成员配置
+  }
+  members.value = combined
   checkedUserIds.value = groupMembersResp.user_ids || []
 }
 
