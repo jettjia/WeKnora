@@ -38,13 +38,6 @@ temp/
 
 # 本地构建产物 / 二进制
 WeKnora
-
-# anydoc 本地构建产物: 镜像内由 build-anydoc-lib.sh 生成 (Dockerfile.app),
-# 不应从宿主机 context 带入 — 否则 COPY . . 会用宿主机的旧产物覆盖
-# 镜像层里刚构建好的 lib/
-third_party/anydoc-go/target/
-third_party/anydoc-go/patched-anydoc/
-third_party/anydoc-go/lib/
 WeKnora-lite
 /server
 /dist/
