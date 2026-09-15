@@ -146,7 +146,6 @@ build_app_image() {
         --build-arg BUILD_TIME_ARG="$BUILD_TIME" \
         --build-arg GO_VERSION_ARG="$GO_VERSION" \
         --build-arg WITH_ANYDOC=${WITH_ANYDOC:-1} \
-        --build-arg RUSTUP_MIRROR_ARG=${RUSTUP_MIRROR:-"https://rsproxy.cn"} \
         -f docker/Dockerfile.app \
         -t wechatopenai/weknora-app:latest \
         .

@@ -57,18 +57,10 @@ ENV GO_VERSION=${GO_VERSION_ARG}
 #     script, and cargo's target/ rides a cache mount, so even a crate
 #     bump recompiles incrementally instead of from zero.
 ARG WITH_ANYDOC=1
-# rsproxy.cn mirrors static.rust-lang.org; on CN networks the official host
-# throttles the toolchain download to a crawl (sh.rustup.rs itself is small
-# and fine). Override with RUSTUP_MIRROR="" to use the official source.
-ARG RUSTUP_MIRROR_ARG=https://rsproxy.cn
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo
 ENV PATH=/usr/local/cargo/bin:$PATH
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     if [ "$WITH_ANYDOC" = "1" ]; then \
-        if [ -n "$RUSTUP_MIRROR_ARG" ]; then \
-            export RUSTUP_DIST_SERVER="$RUSTUP_MIRROR_ARG" \
-                   RUSTUP_UPDATE_ROOT="$RUSTUP_MIRROR_ARG/rustup"; \
-        fi; \
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
             | sh -s -- -y --profile minimal --default-toolchain stable; \
     fi
