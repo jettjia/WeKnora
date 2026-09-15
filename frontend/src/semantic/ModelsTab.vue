@@ -26,6 +26,10 @@
                   <t-icon class="menu-icon" name="history" />
                   <span>{{ t('semantic.model.versions') }}</span>
                 </div>
+                <div class="popup-menu-item" @click.stop="openShare(m)">
+                  <t-icon class="menu-icon" name="share" />
+                  <span>{{ t('semantic.model.share') }}</span>
+                </div>
                 <template v-if="canManageModel(m)">
                   <div class="popup-menu-item" @click.stop="publish(m)">
                     <t-icon class="menu-icon" name="cloud-upload" />
@@ -144,7 +148,9 @@
       @saved="onSaved"
       @published="emit('changed')"
     />
-  </div>
+      <ShareModelDialog ref="shareDialogRef" :orgs="shareOrgs" />
+
+</div>
 </template>
 
 <script setup lang="ts">
@@ -165,8 +171,9 @@ import {
   type DataGroup,
   type ModelVersion,
   type SemanticModel,
-  type TableRef
-} from './api'
+  type TableRef, shareModel, unshareModel, listModelShares } from './api'
+import { listMyOrganizations } from '@/api/organization'
+import ShareModelDialog from './ShareModelDialog.vue'
 import ModelEditor from './ModelEditor.vue'
 import PublishNoteDialog from './PublishNoteDialog.vue'
 import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites'
@@ -410,6 +417,21 @@ async function unpublish(m: SemanticModel) {
   } catch (e: any) {
     MessagePlugin.error(e?.response?.data?.error || 'unpublish failed')
   }
+}
+
+const shareDialogRef = ref<InstanceType<typeof ShareModelDialog> | null>(null)
+const shareOrgs = ref<{ id: string; name: string }[]>([])
+
+async function openShare(m: SemanticModel) {
+  if (!shareOrgs.value.length) {
+    try {
+      const resp = await listMyOrganizations()
+      shareOrgs.value = (resp?.data?.organizations || []).map((o: any) => ({ id: o.id, name: o.name }))
+    } catch {
+      shareOrgs.value = []
+    }
+  }
+  shareDialogRef.value?.open(m)
 }
 
 function confirmDelete(m: SemanticModel) {

@@ -80,6 +80,31 @@ func (d *Deployer) UnpublishModel(tenantID uint64, name string) error {
 	return nil
 }
 
+// CleanupLegacyAutoFiles removes auto/<name>.yaml files that collide with
+// the tenant-prefixed deployment of the same model name — both define the
+// same cube and fail Cube's compile with "duplicate cube name". Files
+// without a prefixed twin are left in place: a publish_failed model (no
+// PublishedYAML snapshot) can still be referenced by joins in other
+// published models and its file is load-bearing.
+func (d *Deployer) CleanupLegacyAutoFiles(names map[string]bool) error {
+	entries, err := os.ReadDir(d.autoDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !names[entry.Name()] {
+			continue
+		}
+		if err := os.Remove(filepath.Join(d.autoDir(), entry.Name())); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
 // DatasourceEntry is one connection serialized into datasources.yaml.
 type DatasourceEntry struct {
 	ID     string

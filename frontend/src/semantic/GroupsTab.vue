@@ -86,7 +86,8 @@
       </t-input>
       <t-checkbox-group v-model="checkedUserIds" class="member-list">
         <div v-for="m in filteredMembers" :key="m.user_id" class="member-row">
-          <t-checkbox :value="m.user_id" :label="`${m.username || m.email} (${m.email})`" />
+          <t-checkbox :value="m.user_id"
+            :label="`${m.username || m.email} (${m.email})${(m as any).tenant_name ? ' · ' + (m as any).tenant_name : ''}`" />
         </div>
         <t-empty v-if="!filteredMembers.length" size="small" :description="t('semantic.group.noMembers')" />
       </t-checkbox-group>
@@ -106,7 +107,8 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { createGroup, deleteGroup, getGroupUsage, listGroupMembers, setGroupMembers, updateGroup, type DataGroup } from './api'
-import { fetchAllTenantMembers, type TenantMember } from '@/api/tenant/members'
+import type { TenantMember } from '@/api/tenant/members'
+import { listMemberCandidates } from './api'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 
@@ -233,12 +235,18 @@ async function openMembers(g: DataGroup) {
   memberGroup.value = g
   memberSearch.value = ''
   membersVisible.value = true
-  const tenantId = useAuthStore().currentTenantId
-  const [allMembers, groupMembersResp] = await Promise.all([
-    fetchAllTenantMembers(tenantId as unknown as number),
+  // 候选名单由后端聚合: 本空间成员 + 共享空间各成员空间的用户;
+  // 系统管理员可见部署内全部用户。保存时服务端按同样口径校验。
+  const [candResp, groupMembersResp] = await Promise.all([
+    listMemberCandidates(),
     listGroupMembers(g.id)
   ])
-  members.value = allMembers
+  members.value = (candResp.candidates || []).map(c => ({
+    user_id: c.user_id,
+    username: c.username || c.email,
+    email: c.email,
+    tenant_name: c.is_current ? undefined : c.tenant_name
+  } as TenantMember))
   checkedUserIds.value = groupMembersResp.user_ids || []
 }
 

@@ -382,6 +382,40 @@ func (a *AuditLog) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
+// ---- Model sharing (共享给组织) ----
+
+// OrgSharedGroupPrefix marks synthetic security-context groups granted to
+// users whose workspace belongs to an organization a model was shared with.
+// Cube accessPolicy allow-rules reference the same names.
+const OrgSharedGroupPrefix = "org-shared:"
+
+// OrgSharedGroup builds the synthetic group name for one organization.
+func OrgSharedGroup(orgID string) string { return OrgSharedGroupPrefix + orgID }
+
+// SemanticModelShare records one model shared to one organization
+// (mirrors the KB/agent share shape).
+type SemanticModelShare struct {
+	ID             string `json:"id" gorm:"type:varchar(36);primaryKey"`
+	// TenantID / SourceTenantID both carry the model owner's workspace.
+	TenantID       uint64 `json:"tenant_id" gorm:"not null;index"`
+	ModelID        string `json:"model_id" gorm:"type:varchar(36);not null;index:idx_semantic_model_shares_model_org,unique"`
+	OrganizationID string `json:"organization_id" gorm:"type:varchar(36);not null;index:idx_semantic_model_shares_model_org,unique"`
+	SharedByUserID string `json:"shared_by_user_id" gorm:"type:varchar(64)"`
+	SourceTenantID uint64 `json:"source_tenant_id" gorm:"not null;index"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// TableName specifies the table name for SemanticModelShare.
+func (SemanticModelShare) TableName() string { return "semantic_model_shares" }
+
+// BeforeCreate hook to generate UUID.
+func (s *SemanticModelShare) BeforeCreate(_ *gorm.DB) error {
+	if s.ID == "" {
+		s.ID = uuid.NewString()
+	}
+	return nil
+}
+
 // StringList is a helper to marshal/unmarshal slug lists stored in jsonb.
 func StringList(raw types.JSON) []string {
 	if len(raw) == 0 {

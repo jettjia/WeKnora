@@ -90,6 +90,17 @@ func (r *Repository) ListModels(ctx context.Context, tenantID uint64) ([]*Semant
 	return out, err
 }
 
+// ListPublishedModelsAllTenants returns published models of the whole
+// deployment. Startup file reconciliation uses this as the source of truth
+// for what the auto/ model directory should contain.
+func (r *Repository) ListPublishedModelsAllTenants(ctx context.Context) ([]*SemanticModel, error) {
+	var out []*SemanticModel
+	err := r.db.WithContext(ctx).
+		Where("status = ?", ModelStatusPublished).
+		Order("tenant_id, created_at ASC").Find(&out).Error
+	return out, err
+}
+
 // AllModelNames returns every non-deleted model name of the deployment
 // (any status). Publish-time join validation uses this: mutually-joined
 // model pairs must be publishable in any order — compile verification via
@@ -213,6 +224,101 @@ func (r *Repository) ReplaceGroupMembers(ctx context.Context, tenantID uint64, g
 }
 
 // ListGroupMembers lists one group's memberships.
+// ListMemberCandidates returns the data-group member picker directory:
+// users of the tenant itself plus users of workspaces sharing an
+// organization with it. allUsers=true (system admin) returns every user
+// with a workspace membership in the deployment.
+func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, allUsers bool) ([]map[string]interface{}, error) {
+	base := `
+		SELECT DISTINCT tm.user_id, u.username, u.email,
+		       t.name AS tenant_name,
+		       (tm.tenant_id = ?) AS is_current
+		FROM tenant_members tm
+		JOIN users u ON u.id = tm.user_id AND u.deleted_at IS NULL
+		JOIN tenants t ON t.id = tm.tenant_id
+		WHERE tm.tenant_id = ?
+		   OR tm.tenant_id IN (
+		       SELECT tenant_id FROM organization_tenant_members
+		       WHERE organization_id IN (
+		           SELECT organization_id FROM organization_tenant_members
+		           WHERE tenant_id = ?
+		       ))
+		ORDER BY t.name, u.username`
+	if allUsers {
+		base = `
+		SELECT DISTINCT tm.user_id, u.username, u.email,
+		       t.name AS tenant_name,
+		       (tm.tenant_id = ?) AS is_current
+		FROM tenant_members tm
+		JOIN users u ON u.id = tm.user_id AND u.deleted_at IS NULL
+		JOIN tenants t ON t.id = tm.tenant_id
+		ORDER BY t.name, u.username`
+	}
+	var out []map[string]interface{}
+	var err error
+	if allUsers {
+		err = r.db.WithContext(ctx).Raw(base, tenantID).Scan(&out).Error
+	} else {
+		err = r.db.WithContext(ctx).Raw(base, tenantID, tenantID, tenantID).Scan(&out).Error
+	}
+	return out, err
+}
+
+// ---- model shares (共享给组织) ----
+
+// CreateShare records one model→organization share (idempotent per pair).
+func (r *Repository) CreateShare(ctx context.Context, share *SemanticModelShare) error {
+	return r.db.WithContext(ctx).Create(share).Error
+}
+
+// DeleteShare removes one model→organization share.
+func (r *Repository) DeleteShare(ctx context.Context, tenantID uint64, modelID, orgID string) error {
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND model_id = ? AND organization_id = ?", tenantID, modelID, orgID).
+		Delete(&SemanticModelShare{}).Error
+}
+
+// ListSharesForModel returns the org shares of one model.
+func (r *Repository) ListSharesForModel(ctx context.Context, tenantID uint64, modelID string) ([]*SemanticModelShare, error) {
+	var out []*SemanticModelShare
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND model_id = ?", tenantID, modelID).
+		Order("created_at ASC").Find(&out).Error
+	return out, err
+}
+
+// DeleteSharesForModel removes all shares of one model (model deleted).
+func (r *Repository) DeleteSharesForModel(ctx context.Context, tenantID uint64, modelID string) error {
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND model_id = ?", tenantID, modelID).
+		Delete(&SemanticModelShare{}).Error
+}
+
+// OrgIDsForTenant returns the organization ids the tenant belongs to.
+func (r *Repository) OrgIDsForTenant(ctx context.Context, tenantID uint64) ([]string, error) {
+	var ids []string
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT organization_id FROM organization_tenant_members WHERE tenant_id = ?`,
+		tenantID).Scan(&ids).Error
+	return ids, err
+}
+
+// ShareExistsForOrgs reports whether the model (by cube name) is shared to
+// any of the given organizations.
+func (r *Repository) ShareExistsForOrgs(ctx context.Context, modelName string, orgIDs []string) (bool, error) {
+	if len(orgIDs) == 0 {
+		return false, nil
+	}
+	var found bool
+	err := r.db.WithContext(ctx).Raw(
+		`SELECT EXISTS(
+			SELECT 1 FROM semantic_model_shares s
+			JOIN semantic_models sm ON sm.id = s.model_id
+			WHERE sm.name = ? AND s.organization_id IN ?)`,
+		modelName, orgIDs).Scan(&found).Error
+	return found, err
+}
+
 func (r *Repository) ListGroupMembers(
 	ctx context.Context,
 	tenantID uint64,
@@ -223,15 +329,62 @@ func (r *Repository) ListGroupMembers(
 	return out, err
 }
 
-// UserGroupNames resolves the data group slugs of one user.
-func (r *Repository) UserGroupNames(ctx context.Context, tenantID uint64, userID string) ([]string, error) {
+// UserGroupNames resolves the data group slugs of one user. Membership is
+// global by user UUID: a workspace-B user granted a workspace-A group (via a
+// shared organization) resolves it from any workspace. What the group
+// unlocks is still gated per model / action by their access policies.
+func (r *Repository) UserGroupNames(ctx context.Context, userID string) ([]string, error) {
 	var names []string
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT g.name FROM semantic_data_groups g
 		JOIN semantic_data_group_members m ON m.group_id = g.id
-		WHERE m.tenant_id = ? AND m.user_id = ? AND g.deleted_at IS NULL`,
-		tenantID, userID).Scan(&names).Error
+		WHERE m.user_id = ? AND g.deleted_at IS NULL`,
+		userID).Scan(&names).Error
 	return names, err
+}
+
+// FilterGrantableMemberIDs splits candidate data-group member ids into
+// grantable and rejected. A user is grantable when they are a member of the
+// tenant itself or of any workspace sharing at least one organization with
+// it (shared-space governance, mirrors agent/KB sharing).
+func (r *Repository) FilterGrantableMemberIDs(ctx context.Context, tenantID uint64, userIDs []string, includeAll bool) (grantable []string, rejected []string, err error) {
+	if len(userIDs) == 0 {
+		return []string{}, []string{}, nil
+	}
+	var rows []struct {
+		UserID    string `gorm:"column:user_id"`
+		Direct    int64  `gorm:"column:direct"`
+		OrgShared int64  `gorm:"column:org_shared"`
+	}
+	err = r.db.WithContext(ctx).Raw(`
+		SELECT m.user_id,
+		       MAX(CASE WHEN m.tenant_id = ? THEN 1 ELSE 0 END) AS direct,
+		       MAX(CASE WHEN ot.organization_id IN (
+		           SELECT organization_id FROM organization_tenant_members
+		           WHERE tenant_id = ?
+		       ) THEN 1 ELSE 0 END) AS org_shared
+		FROM tenant_members m
+		LEFT JOIN organization_tenant_members ot ON ot.tenant_id = m.tenant_id
+		WHERE m.user_id IN ?
+		GROUP BY m.user_id`,
+		tenantID, tenantID, userIDs).Scan(&rows).Error
+	if err != nil {
+		return nil, nil, err
+	}
+	byID := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		byID[row.UserID] = includeAll || row.Direct == 1 || row.OrgShared == 1
+	}
+	grantable = []string{}
+	rejected = []string{}
+	for _, uid := range userIDs {
+		if byID[uid] {
+			grantable = append(grantable, uid)
+		} else {
+			rejected = append(rejected, uid)
+		}
+	}
+	return grantable, rejected, nil
 }
 
 // IsTenantAdmin checks whether the user has an owner or admin role in the

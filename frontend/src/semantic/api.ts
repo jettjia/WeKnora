@@ -255,6 +255,39 @@ export function setGroupMembers(id: string, userIds: string[]) {
   return put(`/api/v1/semantic/groups/${id}/members`, { user_ids: userIds })
 }
 
+export interface ModelShare {
+  id: string
+  model_id: string
+  organization_id: string
+  shared_by_user_id: string
+  source_tenant_id: number
+  created_at: string
+}
+
+export function shareModel(id: string, organizationId: string) {
+  return post<ModelShare>(`/api/v1/semantic/models/${id}/share`, { organization_id: organizationId })
+}
+
+export function unshareModel(id: string, orgId: string) {
+  return del(`/api/v1/semantic/models/${id}/share/${orgId}`)
+}
+
+export function listModelShares(id: string) {
+  return get<{ shares: ModelShare[] }>(`/api/v1/semantic/models/${id}/shares`)
+}
+
+export interface MemberCandidate {
+  user_id: string
+  username: string
+  email: string
+  tenant_name: string
+  is_current: boolean
+}
+
+export function listMemberCandidates() {
+  return get<{ candidates: MemberCandidate[] }>('/api/v1/semantic/groups/candidates')
+}
+
 export function listGroupMembers(id: string) {
   return get<{ user_ids: string[] }>(`/api/v1/semantic/groups/${id}/members`)
 }

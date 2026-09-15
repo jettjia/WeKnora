@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/semantic/cubeclient"
 )
 
@@ -88,6 +89,11 @@ func Register(v1 *gin.RouterGroup, db *gorm.DB, viewer, contributor, admin gin.H
 	if err != nil {
 		return fmt.Errorf("semantic module init failed: %w", err)
 	}
+	// Heal the model directory before serving: files left by older deployer
+	// formats compile as duplicate cubes and break /meta for everyone.
+	if err := e.ReconcileDeployedFiles(context.Background()); err != nil {
+		logger.Warnf(context.Background(), "[semantic] model directory reconciliation failed: %v", err)
+	}
 	h := NewHandler(e)
 	registerRoutes(v1.Group("/semantic"), h, viewer, contributor, admin)
 
@@ -126,6 +132,9 @@ func registerRoutes(g *gin.RouterGroup, h *Handler, viewer, contributor, admin g
 	g.POST("/models/:id/unpublish", admin, h.UnpublishModel)
 	g.GET("/models/:id/versions", viewer, h.ListVersions)
 	g.POST("/models/:id/rollback", admin, h.RollbackModel)
+	g.POST("/models/:id/share", admin, h.ShareModel)
+	g.DELETE("/models/:id/share/:orgId", admin, h.UnshareModel)
+	g.GET("/models/:id/shares", viewer, h.ListModelShares)
 	g.POST("/models/:id/preview", contributor, h.PreviewModel)
 
 	// data groups
@@ -134,6 +143,7 @@ func registerRoutes(g *gin.RouterGroup, h *Handler, viewer, contributor, admin g
 	g.PUT("/groups/:id", admin, h.UpdateGroup)
 	g.DELETE("/groups/:id", admin, h.DeleteGroup)
 	g.PUT("/groups/:id/members", admin, h.SetGroupMembers)
+	g.GET("/groups/candidates", viewer, h.MemberCandidates)
 	g.GET("/groups/:id/members", viewer, h.ListGroupMembers)
 	g.GET("/groups/:id/usage", viewer, h.GroupUsage)
 
