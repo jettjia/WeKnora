@@ -224,42 +224,44 @@ func (r *Repository) ReplaceGroupMembers(ctx context.Context, tenantID uint64, g
 }
 
 // ListGroupMembers lists one group's memberships.
-// ListMemberCandidates returns the data-group member picker directory:
-// users of the tenant itself plus users of workspaces sharing an
-// organization with it. allUsers=true (system admin) returns every user
-// with a workspace membership in the deployment.
+// ListMemberCandidates returns the data-group member picker directory, one
+// row per USER (the UI groups them by their home workspace, users.tenant_id).
+// The candidate SET is still membership-scoped: users of the tenant itself
+// plus users of workspaces sharing an organization with it (system admins
+// see every user with a home workspace in the deployment). Grouping by the
+// home workspace is display-only — data-group membership resolves globally
+// by user UUID, and grant validation still runs on tenant_members.
 func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, allUsers bool) ([]map[string]interface{}, error) {
 	base := `
-		SELECT DISTINCT tm.user_id, tm.tenant_id, u.username, u.email,
+		SELECT u.id AS user_id, u.tenant_id, u.username, u.email,
 		       t.name AS tenant_name,
-		       (tm.tenant_id = ?) AS is_current
-		FROM tenant_members tm
-		JOIN users u ON u.id = tm.user_id AND u.deleted_at IS NULL
-		JOIN tenants t ON t.id = tm.tenant_id
-		WHERE tm.tenant_id = ?
-		   OR tm.tenant_id IN (
-		       SELECT tenant_id FROM organization_tenant_members
-		       WHERE organization_id IN (
-		           SELECT organization_id FROM organization_tenant_members
-		           WHERE tenant_id = ?
-		       ))
-		ORDER BY t.name, u.username`
-	if allUsers {
-		base = `
-		SELECT DISTINCT tm.user_id, tm.tenant_id, u.username, u.email,
-		       t.name AS tenant_name,
-		       (tm.tenant_id = ?) AS is_current
-		FROM tenant_members tm
-		JOIN users u ON u.id = tm.user_id AND u.deleted_at IS NULL
-		JOIN tenants t ON t.id = tm.tenant_id
-		ORDER BY t.name, u.username`
+		       (u.tenant_id = ?) AS is_current
+		FROM users u
+		JOIN tenants t ON t.id = u.tenant_id
+		WHERE u.deleted_at IS NULL`
+	if !allUsers {
+		base += `
+		  AND (
+		    u.tenant_id = ?
+		    OR u.id IN (
+		        SELECT tm.user_id FROM tenant_members tm
+		        WHERE tm.tenant_id = ?
+		           OR tm.tenant_id IN (
+		               SELECT tenant_id FROM organization_tenant_members
+		               WHERE organization_id IN (
+		                   SELECT organization_id FROM organization_tenant_members
+		                   WHERE tenant_id = ?
+		               )))
+		  )`
 	}
+	base += `
+		ORDER BY t.name, u.username`
 	var out []map[string]interface{}
 	var err error
 	if allUsers {
 		err = r.db.WithContext(ctx).Raw(base, tenantID).Scan(&out).Error
 	} else {
-		err = r.db.WithContext(ctx).Raw(base, tenantID, tenantID, tenantID).Scan(&out).Error
+		err = r.db.WithContext(ctx).Raw(base, tenantID, tenantID, tenantID, tenantID).Scan(&out).Error
 	}
 	return out, err
 }
