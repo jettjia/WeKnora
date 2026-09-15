@@ -23,6 +23,10 @@ var versionedSQLiteTables = []string{
 	"browser_devices",
 	"browser_pairings",
 	"browser_task_interruptions",
+	// 000902 automation module / 000903 semantic model share
+	"automations",
+	"automation_runs",
+	"semantic_model_shares",
 }
 
 // versionedSQLiteColumns maps each existing table to the columns that the
