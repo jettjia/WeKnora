@@ -278,6 +278,7 @@ export function listModelShares(id: string) {
 
 export interface MemberCandidate {
   user_id: string
+  tenant_id: number
   username: string
   email: string
   tenant_name: string
