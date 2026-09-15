@@ -72,7 +72,7 @@ function readRecents(): PinEntry[] {
       (e: unknown): e is PinEntry =>
         !!e &&
         typeof (e as PinEntry).type === 'string' &&
-        (['kb', 'agent', 'semantic_model'] as const).includes((e as PinEntry).type as any) &&
+        (['kb', 'agent', 'semantic_model', 'automation'] as const).includes((e as PinEntry).type as any) &&
         typeof (e as PinEntry).id === 'string' &&
         typeof (e as PinEntry).ts === 'number'
     )
@@ -93,9 +93,10 @@ const favoritesByType: Record<ResourceType, Ref<PinEntry[]>> = {
   agent: ref<PinEntry[]>([]),
   // semantic_model 的收藏由 semantic 模块自行管理 (见 @/semantic/ModelsTab)
   semantic_model: ref<PinEntry[]>([]),
+  automation: ref<PinEntry[]>([]),
 }
-const loaded: Record<ResourceType, boolean> = { kb: false, agent: false, semantic_model: false }
-const inFlight: Record<ResourceType, Promise<void> | null> = { kb: null, agent: null, semantic_model: null }
+const loaded: Record<ResourceType, boolean> = { kb: false, agent: false, semantic_model: false, automation: false }
+const inFlight: Record<ResourceType, Promise<void> | null> = { kb: null, agent: null, semantic_model: null, automation: null }
 
 // recents revision counter — same bump-to-invalidate pattern as before.
 const recentsRevision = ref(0)
@@ -150,12 +151,15 @@ function installTenantWatcher(): void {
     () => {
       loaded.kb = false
       loaded.agent = false
+      loaded.automation = false
       favoritesByType.kb.value = []
       favoritesByType.agent.value = []
+      favoritesByType.automation.value = []
       // Eagerly refetch both types so any already-mounted list view sees
       // fresh data without a manual refresh.
       void fetchFavorites('kb')
       void fetchFavorites('agent')
+      void fetchFavorites('automation')
       // Recents are keyed on the tenant id (see `recentsKey`); bump the
       // revision so any active computed re-reads against the new key.
       bumpRecents()
@@ -183,10 +187,11 @@ export function useResourcePins(): UseResourcePinsResult {
   // 0 and no view depends on a synchronous read.
   if (!loaded.kb) void fetchFavorites('kb')
   if (!loaded.agent) void fetchFavorites('agent')
+  if (!loaded.automation) void fetchFavorites('automation')
 
   const favorites = computed<PinEntry[]>(() => {
     // Merge both type lists and sort by ts desc.
-    return [...favoritesByType.kb.value, ...favoritesByType.agent.value].sort(
+    return [...favoritesByType.kb.value, ...favoritesByType.agent.value, ...favoritesByType.automation.value].sort(
       (a, b) => b.ts - a.ts
     )
   })

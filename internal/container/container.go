@@ -47,10 +47,12 @@ import (
 	tencentVectorDBRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/tencentvectordb"
 	weaviateRepo "github.com/Tencent/WeKnora/internal/application/repository/retriever/weaviate"
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/automation"
 	chatpipeline "github.com/Tencent/WeKnora/internal/application/service/chat_pipeline"
 	"github.com/Tencent/WeKnora/internal/application/service/file"
 	"github.com/Tencent/WeKnora/internal/application/service/memory"
 	"github.com/Tencent/WeKnora/internal/application/service/retriever"
+	"github.com/Tencent/WeKnora/internal/browserskill"
 	"github.com/Tencent/WeKnora/internal/common"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/database"
@@ -290,6 +292,14 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	}))
 	// Expose Gate as MCPApproval interface so AgentService and others can depend on the abstraction.
 	must(container.Provide(func(g *approval.Gate) approval.MCPApproval { return g }))
+	must(container.Provide(func(cleaner interfaces.ResourceCleaner, db *gorm.DB) (*browserskill.Manager, error) {
+		manager := browserskill.NewManager(browserskill.NewStore(db))
+		if err := manager.ValidateConfiguration(); err != nil {
+			return nil, err
+		}
+		cleaner.RegisterWithName("BrowserSkill", func() error { manager.Close(); return nil })
+		return manager, nil
+	}))
 	must(container.Provide(service.NewAgentService))
 
 	// Session service (depends on agent service)
@@ -443,6 +453,16 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(handler.NewDataSourceHandler))
 	// Wiki page handler
 	must(container.Provide(handler.NewWikiPageHandler))
+	// Automation module (自动化): scheduled agent runs
+	logger.Debugf(ctx, "[Container] Registering automation module...")
+	must(container.Provide(automation.NewRepository))
+	must(container.Provide(automation.NewService))
+	must(container.Provide(automation.NewScheduler))
+	must(container.Provide(automation.NewRunner))
+	must(container.Provide(automation.NewHandler))
+	must(container.Invoke(func(svc *automation.Service, sched *automation.Scheduler) {
+		svc.SetScheduleUpdater(sched)
+	}))
 	// IM integration
 	logger.Debugf(ctx, "[Container] Registering IM integration...")
 	must(container.Provide(imPkg.NewService))

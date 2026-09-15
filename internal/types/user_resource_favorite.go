@@ -10,6 +10,8 @@ const (
 	ResourceTypeAgent = "agent"
 	// ResourceTypeSemanticModel 数据建模模块的语义模型 (internal/semantic)
 	ResourceTypeSemanticModel = "semantic_model"
+	// ResourceTypeAutomation: 自动化任务 (自动化模块)。
+	ResourceTypeAutomation = "automation"
 )
 
 // UserResourceFavorite is a per-(user, tenant) star on a single resource.
@@ -35,7 +37,7 @@ func (UserResourceFavorite) TableName() string {
 // the table and break the frontend's segmented view).
 func IsValidFavoriteResourceType(t string) bool {
 	switch t {
-	case ResourceTypeKB, ResourceTypeAgent, ResourceTypeSemanticModel:
+	case ResourceTypeKB, ResourceTypeAgent, ResourceTypeSemanticModel, ResourceTypeAutomation:
 		return true
 	default:
 		return false

@@ -14,6 +14,7 @@ import (
 	"go.uber.org/dig"
 	"gorm.io/gorm"
 
+	"github.com/Tencent/WeKnora/internal/automation"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
@@ -53,6 +54,8 @@ type RouterParams struct {
 	AuditLogService              interfaces.AuditLogService
 	ChunkHandler                 *handler.ChunkHandler
 	SessionHandler               *session.Handler
+	AutomationHandler            *automation.Handler
+	AutomationScheduler          *automation.Scheduler
 	MessageHandler               *handler.MessageHandler
 	MessageSuggestionHandler     *handler.MessageSuggestionHandler
 	ModelHandler                 *handler.ModelHandler
@@ -185,6 +188,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// auth headers on the WS handshake, so this must precede the global Auth
 	// middleware). The ticket is minted by an authenticated POST.
 	RegisterSandboxTerminalRoutes(r, params.SessionHandler)
+	r.GET("/api/v1/local-browser/extension", params.SessionHandler.BrowserSkillExtension)
+	r.POST("/api/v1/local-browser/extension/authorize", params.SessionHandler.BrowserSkillAuthorize)
+	r.POST("/api/v1/local-browser/internal", params.SessionHandler.BrowserSkillInternal)
 
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantMemberService, params.TenantAPIKeyService, params.Config))
@@ -279,10 +285,17 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterChunkRoutes(v1, params.ChunkHandler, rbacGuards)
 		RegisterSessionRoutes(v1, params.SessionHandler, params.MessageSuggestionHandler, rbacGuards)
 		RegisterChatRoutes(v1, params.SessionHandler, rbacGuards)
+		automation.RegisterRoutes(v1, params.AutomationHandler, rbacGuards.Viewer(), rbacGuards.Contributor(), rbacGuards.Admin())
+		if err := params.AutomationScheduler.Start(context.Background()); err != nil {
+			logger.Errorf(context.Background(), "[automation] scheduler start failed: %v", err)
+		}
 		RegisterMessageRoutes(v1, params.MessageHandler, rbacGuards)
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, rbacGuards)
 		RegisterSandboxConfigRoutes(v1, params.SandboxConfigHandler, params.SandboxSkillHandler, rbacGuards)
 		RegisterMyEnvVarRoutes(v1, params.MeEnvVarHandler)
+		v1.GET("/me/browser", params.SessionHandler.BrowserSkillAccount)
+		v1.GET("/me/browser/extension", params.SessionHandler.BrowserSkillDownload)
+		v1.POST("/me/browser", params.SessionHandler.BrowserSkillAccount)
 		RegisterEvaluationRoutes(v1, params.EvaluationHandler, rbacGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, rbacGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))

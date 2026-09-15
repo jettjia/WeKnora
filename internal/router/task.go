@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/automation"
 	"github.com/Tencent/WeKnora/internal/common"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/middleware/asynqdl"
@@ -35,6 +36,7 @@ type AsynqTaskParams struct {
 	SharedServer         *asynq.Server `name:"sharedAsynqServer"`
 	WikiServer           *asynq.Server `name:"wikiAsynqServer"`
 	KnowledgeService     interfaces.KnowledgeService
+	AutomationRunner     *automation.Runner
 	KnowledgeBaseService interfaces.KnowledgeBaseService
 	TagService           interfaces.KnowledgeTagService
 	DataSourceService    interfaces.DataSourceService
@@ -315,6 +317,9 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 
 	// Register long-term memory distillation handler
 	mux.HandleFunc(types.TypeMemoryExtract, params.MemoryService.Handle)
+
+	// Register scheduled agent run handler (automation module)
+	mux.HandleFunc(types.TypeAutomationRun, params.AutomationRunner.HandleRunTask)
 
 	// Run the same mux on every pool. Shared and dedicated servers intentionally
 	// overlap, but Redis dequeue is atomic, so each task still executes once.
