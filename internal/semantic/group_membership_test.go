@@ -103,9 +103,9 @@ func TestMemberCandidatesArgCount(t *testing.T) {
 		require.NoError(t, e.repo.db.Create(&tenants[i]).Error)
 	}
 	users := []types.User{
-		{ID: "u1", Username: "u1", Email: "u1@test.dev", PasswordHash: "x"},
-		{ID: "u2", Username: "u2", Email: "u2@test.dev", PasswordHash: "x"},
-		{ID: "u3", Username: "u3", Email: "u3@test.dev", PasswordHash: "x"},
+		{ID: "u1", Username: "u1", Email: "u1@test.dev", PasswordHash: "x", TenantID: 1},
+		{ID: "u2", Username: "u2", Email: "u2@test.dev", PasswordHash: "x", TenantID: 2},
+		{ID: "u3", Username: "u3", Email: "u3@test.dev", PasswordHash: "x", TenantID: 3},
 	}
 	for i := range users {
 		require.NoError(t, e.repo.db.Create(&users[i]).Error)
