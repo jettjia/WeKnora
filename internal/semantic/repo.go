@@ -230,7 +230,7 @@ func (r *Repository) ReplaceGroupMembers(ctx context.Context, tenantID uint64, g
 // with a workspace membership in the deployment.
 func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, allUsers bool) ([]map[string]interface{}, error) {
 	base := `
-		SELECT DISTINCT tm.user_id, u.username, u.email,
+		SELECT DISTINCT tm.user_id, tm.tenant_id, u.username, u.email,
 		       t.name AS tenant_name,
 		       (tm.tenant_id = ?) AS is_current
 		FROM tenant_members tm
@@ -246,7 +246,7 @@ func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, 
 		ORDER BY t.name, u.username`
 	if allUsers {
 		base = `
-		SELECT DISTINCT tm.user_id, u.username, u.email,
+		SELECT DISTINCT tm.user_id, tm.tenant_id, u.username, u.email,
 		       t.name AS tenant_name,
 		       (tm.tenant_id = ?) AS is_current
 		FROM tenant_members tm

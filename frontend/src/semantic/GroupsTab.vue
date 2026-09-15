@@ -85,11 +85,13 @@
         <template #suffix-icon><search-icon /></template>
       </t-input>
       <t-checkbox-group v-model="checkedUserIds" class="member-list">
-        <div v-for="m in filteredMembers" :key="m.user_id" class="member-row">
-          <t-checkbox :value="m.user_id"
-            :label="`${m.username || m.email} (${m.email})${(m as any).tenant_name ? ' · ' + (m as any).tenant_name : ''}`" />
-        </div>
-        <t-empty v-if="!filteredMembers.length" size="small" :description="t('semantic.group.noMembers')" />
+        <template v-for="sec in memberSections" :key="sec.key">
+          <div class="member-section-title">{{ sec.title }}</div>
+          <div v-for="m in sec.items" :key="sec.key + '-' + m.user_id" class="member-row">
+            <t-checkbox :value="m.user_id" :label="`${m.username} (${m.email})`" />
+          </div>
+        </template>
+        <t-empty v-if="!memberSections.length" size="small" :description="t('semantic.group.noMembers')" />
       </t-checkbox-group>
       <t-button variant="text" size="small" theme="primary" class="goto-members" @click="gotoMembers">
         {{ t('semantic.group.gotoMembers') }} →
@@ -107,7 +109,6 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { SearchIcon } from 'tdesign-icons-vue-next'
 import { createGroup, deleteGroup, getGroupUsage, listGroupMembers, setGroupMembers, updateGroup, type DataGroup } from './api'
-import type { TenantMember } from '@/api/tenant/members'
 import { listMemberCandidates } from './api'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
@@ -128,7 +129,7 @@ const saving = ref(false)
 const form = ref<{ name: string; title: string; description: string }>({ name: '', title: '', description: '' })
 const membersVisible = ref(false)
 const memberGroup = ref<DataGroup | null>(null)
-const members = ref<TenantMember[]>([])
+const members = ref<MemberCandidateRow[]>([])
 const memberSearch = ref('')
 const checkedUserIds = ref<string[]>([])
 const savingMembers = ref(false)
@@ -137,12 +138,38 @@ const memberCounts = ref<Record<string, number>>({})
 const nameError = computed(() =>
   form.value.name && !slugPattern.test(form.value.name) ? t('semantic.group.nameHint') : ''
 )
-const filteredMembers = computed(() => {
+// 候选行: 一行 = 用户 × 空间成员关系 (同一用户可能出现在多个空间分区,
+// 勾选状态按 user_id 跨区联动 — 数据组成员按用户全局生效)。
+interface MemberCandidateRow {
+  user_id: string
+  username: string
+  email: string
+  tenant_id?: number
+  tenant_name?: string
+  is_current?: boolean
+}
+interface MemberSection { key: string; title: string; items: MemberCandidateRow[] }
+
+const memberSections = computed<MemberSection[]>(() => {
   const q = memberSearch.value.trim().toLowerCase()
-  if (!q) return members.value
-  return members.value.filter(
-    m => m.email?.toLowerCase().includes(q) || m.username?.toLowerCase().includes(q)
-  )
+  const hit = (m: MemberCandidateRow) =>
+    !q || m.email?.toLowerCase().includes(q) || m.username?.toLowerCase().includes(q)
+  const sections: MemberSection[] = []
+  const current = members.value.filter(m => m.is_current && hit(m))
+  if (current.length) {
+    sections.push({ key: 'current', title: t('semantic.group.currentSpace'), items: current })
+  }
+  const others = new Map<number, MemberSection>()
+  for (const m of members.value) {
+    if (m.is_current || !hit(m)) continue
+    const key = m.tenant_id ?? 0
+    if (!others.has(key)) {
+      others.set(key, { key: `t${key}`, title: m.tenant_name || m.email, items: [] })
+    }
+    others.get(key)!.items.push(m)
+  }
+  sections.push(...[...others.values()].sort((a, b) => a.title.localeCompare(b.title)))
+  return sections
 })
 
 function shortTime(ts?: string) {
@@ -245,8 +272,10 @@ async function openMembers(g: DataGroup) {
     user_id: c.user_id,
     username: c.username || c.email,
     email: c.email,
-    tenant_name: c.is_current ? undefined : c.tenant_name
-  } as TenantMember))
+    tenant_id: c.tenant_id,
+    tenant_name: c.tenant_name,
+    is_current: !!c.is_current
+  }))
   checkedUserIds.value = groupMembersResp.user_ids || []
 }
 
@@ -291,6 +320,13 @@ defineExpose({ openCreate })
   gap: 2px;
   max-height: 55vh;
   overflow: auto;
+}
+.member-section-title {
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+  margin: 10px 0 2px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--td-component-stroke);
 }
 .member-row {
   padding: 2px 0;
