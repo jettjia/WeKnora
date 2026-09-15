@@ -31,8 +31,6 @@ COPY third_party/anydoc-go/go.mod third_party/anydoc-go/go.mod
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd/download cmd/download
 RUN go run cmd/download/duckdb/duckdb.go
-COPY . .
-RUN bash ./scripts/check-license-bundle.sh
 
 # Get version and commit info for build injection
 ARG VERSION_ARG
@@ -50,19 +48,38 @@ ENV GO_VERSION=${GO_VERSION_ARG}
 # Python docreader). Default on so Hub / compose images ship a working
 # engine; pass WITH_ANYDOC=0 to skip the Rust toolchain (~few minutes and
 # ~1 GB of build-stage layers).
+#
+# Cache-structure note: the Rust pipeline lives BEFORE `COPY . .` and is
+# keyed on narrow inputs, so app-source edits never re-run it:
+#   - the rustup layer is keyed on nothing (toolchain cached until the
+#     base image or command changes);
+#   - the anydoc layer is keyed only on third_party/anydoc-go + its build
+#     script, and cargo's target/ rides a cache mount, so even a crate
+#     bump recompiles incrementally instead of from zero.
 ARG WITH_ANYDOC=1
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo
 ENV PATH=/usr/local/cargo/bin:$PATH
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
     if [ "$WITH_ANYDOC" = "1" ]; then \
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-            | sh -s -- -y --profile minimal --default-toolchain stable && \
+            | sh -s -- -y --profile minimal --default-toolchain stable; \
+    fi
+COPY third_party/anydoc-go/ third_party/anydoc-go/
+COPY scripts/build-anydoc-lib.sh scripts/build-anydoc-lib.sh
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/third_party/anydoc-go/target \
+    if [ "$WITH_ANYDOC" = "1" ]; then \
         ./scripts/build-anydoc-lib.sh; \
     fi
 
-# Build the application with version info
+COPY . .
+RUN bash ./scripts/check-license-bundle.sh
+
+# Build the application with version info (go build cache rides a cache
+# mount too, so app-only changes recompile incrementally across builds)
 RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
     if [ "$WITH_ANYDOC" = "1" ]; then \
         make build-prod GO_BUILD_TAGS=anydoc; \
     else \
