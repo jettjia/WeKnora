@@ -106,20 +106,40 @@ func TestMemberCandidatesArgCount(t *testing.T) {
 		{ID: "u1", Username: "u1", Email: "u1@test.dev", PasswordHash: "x", TenantID: 1},
 		{ID: "u2", Username: "u2", Email: "u2@test.dev", PasswordHash: "x", TenantID: 2},
 		{ID: "u3", Username: "u3", Email: "u3@test.dev", PasswordHash: "x", TenantID: 3},
+		// u4 模拟"被移出原空间"的用户: home 指针已被 cleanup 清零,
+		// 但在共享空间 (tenant 2) 仍有活跃成员关系 — 必须仍可见,
+		// 且归属到兜底空间 (tenant_members 的最低 tenant_id)。
+		{ID: "u4", Username: "u4", Email: "u4@test.dev", PasswordHash: "x", TenantID: 0},
 	}
 	for i := range users {
 		require.NoError(t, e.repo.db.Create(&users[i]).Error)
 	}
+	require.NoError(t, e.repo.db.Create(&types.TenantMember{
+		UserID: "u4", TenantID: 2, Role: "contributor", Status: "active",
+	}).Error)
 
-	// allUsers=true: 部署内所有有空间归属的用户都可见。
+	// allUsers=true: 部署内所有用户都可见 (含 home 被清零的 u4)。
 	all, err := e.repo.ListMemberCandidates(ctx, 1, true)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"u1", "u2", "u3"}, candidateIDs(all))
+	assert.ElementsMatch(t, []string{"u1", "u2", "u3", "u4"}, candidateIDs(all))
+	for _, r := range all {
+		if r["user_id"] == "u4" {
+			switch v := r["tenant_id"].(type) {
+			case *interface{}:
+				if v != nil {
+					assert.EqualValues(t, 2, *v, "u4 应兜底归属到剩余成员关系 (tenant 2)")
+				}
+			default:
+				assert.EqualValues(t, 2, v, "u4 应兜底归属到剩余成员关系 (tenant 2)")
+			}
+		}
+	}
 
-	// allUsers=false: 本空间 + 共享空间成员, u3 不可见。
+	// allUsers=false: 本空间 + 共享空间成员; u3 无关系不可见, u4 凭
+	// tenant 2 的成员关系可见 (tenant 2 与 tenant 1 同属 org-1)。
 	scoped, err := e.repo.ListMemberCandidates(ctx, 1, false)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"u1", "u2"}, candidateIDs(scoped))
+	assert.ElementsMatch(t, []string{"u1", "u2", "u4"}, candidateIDs(scoped))
 }
 
 func candidateIDs(rows []map[string]interface{}) []string {

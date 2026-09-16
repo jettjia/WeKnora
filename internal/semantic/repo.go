@@ -225,28 +225,39 @@ func (r *Repository) ReplaceGroupMembers(ctx context.Context, tenantID uint64, g
 
 // ListGroupMembers lists one group's memberships.
 // ListMemberCandidates returns the data-group member picker directory, one
-// row per USER (the UI groups them by their home workspace, users.tenant_id).
+// row per USER (the UI groups them by their home workspace). The effective
+// home is users.tenant_id when set, else the user's lowest remaining active
+// membership (cleanupRemovedMemberState nulls the home pointer when a user's
+// original space removes them, so tenant_members is the fallback authority).
 // The candidate SET is still membership-scoped: users of the tenant itself
 // plus users of workspaces sharing an organization with it (system admins
-// see every user with a home workspace in the deployment). Grouping by the
-// home workspace is display-only — data-group membership resolves globally
-// by user UUID, and grant validation still runs on tenant_members.
+// see every user in the deployment). Grouping is display-only — data-group
+// membership resolves globally by user UUID, and grant validation still
+// runs on tenant_members.
 func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, allUsers bool) ([]map[string]interface{}, error) {
 	base := `
-		SELECT u.id AS user_id, u.tenant_id, u.username, u.email,
-		       t.name AS tenant_name,
-		       (u.tenant_id = ?) AS is_current
+		SELECT u.id AS user_id,
+		       COALESCE(NULLIF(u.tenant_id, 0), fb.tenant_id) AS tenant_id,
+		       u.username, u.email,
+		       ft.name AS tenant_name,
+		       (COALESCE(NULLIF(u.tenant_id, 0), fb.tenant_id) = ?) AS is_current
 		FROM users u
-		JOIN tenants t ON t.id = u.tenant_id
+		LEFT JOIN (
+		    SELECT tm.user_id, MIN(tm.tenant_id) AS tenant_id
+		    FROM tenant_members tm
+		    GROUP BY tm.user_id
+		) fb ON fb.user_id = u.id
+		LEFT JOIN tenants ft
+		       ON ft.id = COALESCE(NULLIF(u.tenant_id, 0), fb.tenant_id)
 		WHERE u.deleted_at IS NULL`
 	if !allUsers {
 		base += `
 		  AND (
 		    u.tenant_id = ?
 		    OR u.id IN (
-		        SELECT tm.user_id FROM tenant_members tm
-		        WHERE tm.tenant_id = ?
-		           OR tm.tenant_id IN (
+		        SELECT tm2.user_id FROM tenant_members tm2
+		        WHERE tm2.tenant_id = ?
+		           OR tm2.tenant_id IN (
 		               SELECT tenant_id FROM organization_tenant_members
 		               WHERE organization_id IN (
 		                   SELECT organization_id FROM organization_tenant_members
@@ -255,7 +266,7 @@ func (r *Repository) ListMemberCandidates(ctx context.Context, tenantID uint64, 
 		  )`
 	}
 	base += `
-		ORDER BY t.name, u.username`
+		ORDER BY tenant_name, u.username`
 	var out []map[string]interface{}
 	var err error
 	if allUsers {
