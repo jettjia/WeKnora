@@ -128,9 +128,25 @@ func (r *Repository) FindModel(ctx context.Context, tenantID uint64, id string) 
 	return &m, nil
 }
 
-// SaveModel upserts a model.
+// saveModelColumns enumerates the persisted columns explicitly. A
+// full-struct Save makes ANY schema drift (a struct column the migrations
+// never added) fail every model write; the explicit list keeps writes
+// working for the columns that exist and lets CheckSchema surface drift
+// at startup instead.
+var saveModelColumns = []string{
+	"tenant_id", "name", "title", "description", "connection_id", "kind",
+	"draft_yaml", "published_yaml", "status", "last_error",
+	"allowed_groups", "member_visibility", "version", "published_at",
+	"created_by", "updated_at",
+}
+
+// SaveModel upserts a model: Create for a fresh struct (ID assigned by the
+// BeforeCreate hook), column-selected Updates for an existing row.
 func (r *Repository) SaveModel(ctx context.Context, m *SemanticModel) error {
-	return r.db.WithContext(ctx).Save(m).Error
+	if m.ID == "" {
+		return r.db.WithContext(ctx).Create(m).Error
+	}
+	return r.db.WithContext(ctx).Select(saveModelColumns).Updates(m).Error
 }
 
 // DeleteModel soft-deletes a model and its version history.
