@@ -810,6 +810,12 @@ func (e *Engine) Publish(
 	// 重发布不丢共享: 重新合并 org-shared 访问规则
 	if err := e.applySharePolicyRules(ctx, m); err != nil {
 		logger.Warnf(ctx, "[semantic] share policy re-apply failed: %v", err)
+		// 静默失效比失败更危险 ("发布成功但共享悄悄没了"): 写进
+		// last_error, 模型列表/详情的 UI 会露出。
+		m.LastError = fmt.Sprintf("已发布, 但共享策略重写失败: %v", err)
+		if serr := e.repo.SaveModel(ctx, m); serr != nil {
+			logger.Warnf(ctx, "[semantic] persist share last_error failed: %v", serr)
+		}
 	}
 	return &PublishResult{Status: m.Status, Version: next}, nil
 }
@@ -1392,7 +1398,14 @@ func (e *Engine) ShareModel(ctx context.Context, userID string, tenant uint64, m
 		return nil, err
 	}
 	if err := e.applySharePolicyRules(ctx, a); err != nil {
-		return share, fmt.Errorf("共享已记录, 但策略重写失败: %w", err)
+		// 补偿回滚: 策略重写失败时删掉刚写的共享记录。CreateShare 与
+		// 文件部署/Cube 发布不同事务, 不回滚的话重试会撞 409 "已共享",
+		// 卡死在脏状态。
+		if derr := e.repo.DeleteShare(ctx, tenant, a.ID, orgID); derr != nil {
+			logger.Errorf(ctx, "[semantic] share rollback failed model=%s org=%s: %v", a.Name, orgID, derr)
+			return nil, fmt.Errorf("共享已记录且策略重写失败, 回滚也失败 (需人工处理): %w", err)
+		}
+		return nil, fmt.Errorf("共享策略重写失败, 已回滚: %w", err)
 	}
 	e.audit(ctx, tenant, userID, "model.share", "model:"+a.Name,
 		map[string]interface{}{"organization_id": orgID})
