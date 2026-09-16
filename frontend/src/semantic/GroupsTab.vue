@@ -84,15 +84,21 @@
       <t-input v-model="memberSearch" clearable :placeholder="t('semantic.group.searchUser')" class="member-search">
         <template #suffix-icon><search-icon /></template>
       </t-input>
-      <t-checkbox-group v-model="checkedUserIds" class="member-list">
+      <div class="member-list">
         <template v-for="sec in memberSections" :key="sec.key">
           <div class="member-section-title">{{ sec.title }}</div>
-          <div v-for="m in sec.items" :key="sec.key + '-' + m.user_id" class="member-row">
-            <t-checkbox :value="m.user_id" :label="`${m.username} (${m.email})`" />
-          </div>
+          <!-- 每个分区独立 group, 共享同一个 v-model (勾选按 user_id 跨区联动)。
+               分区标题必须留在 group 外: TDesign .t-checkbox-group 默认
+               inline-flex + flex-wrap, 把非 checkbox 的标题混进去在部分
+               构建下会流式错排。 -->
+          <t-checkbox-group v-model="checkedUserIds" class="member-section">
+            <div v-for="m in sec.items" :key="m.user_id" class="member-row">
+              <t-checkbox :value="m.user_id" :label="`${m.username} (${m.email})`" />
+            </div>
+          </t-checkbox-group>
         </template>
         <t-empty v-if="!memberSections.length" size="small" :description="t('semantic.group.noMembers')" />
-      </t-checkbox-group>
+      </div>
       <t-button variant="text" size="small" theme="primary" class="goto-members" @click="gotoMembers">
         {{ t('semantic.group.gotoMembers') }} →
       </t-button>
@@ -315,11 +321,13 @@ defineExpose({ openCreate })
   margin-bottom: 8px;
 }
 .member-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
   max-height: 55vh;
   overflow: auto;
+}
+/* 覆盖 TDesign .t-checkbox-group 的 inline-flex/wrap 默认值:
+   分区内按普通块级流堆叠, 不给流式错排机会 */
+.member-section {
+  display: block;
 }
 .member-section-title {
   font-size: 12px;
