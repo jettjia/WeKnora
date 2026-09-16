@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { SearchIcon } from 'tdesign-icons-vue-next'
@@ -192,7 +192,15 @@ async function loadMemberCounts() {
     }
   }
 }
-loadMemberCounts()
+// 分组列表由父组件异步加载: 挂载时往往是空数组, 必须等列表就绪再拉计数,
+// 否则成员数永远显示 0。
+watch(
+  () => props.modelValue?.length ?? 0,
+  (len) => {
+    if (len > 0) loadMemberCounts()
+  },
+  { immediate: true }
+)
 
 function openCreate() {
   editing.value = null
