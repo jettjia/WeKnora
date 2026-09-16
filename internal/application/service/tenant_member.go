@@ -439,7 +439,13 @@ func (s *tenantMemberService) cleanupRemovedMemberState(ctx context.Context, use
 		} else if user != nil {
 			changed := false
 			if user.TenantID == tenantID {
-				user.TenantID = 0
+				// Re-point the home tenant to a remaining active membership
+				// (lowest tenant id, deterministic) instead of leaving it
+				// unset: a member removed from their original space who
+				// still belongs to other workspaces must stay visible to
+				// features keyed on the home pointer (e.g. the data-group
+				// member selector).
+				user.TenantID = s.fallbackHomeTenant(ctx, userID, tenantID)
 				changed = true
 			}
 			if user.Preferences.LastActiveTenantID != nil && *user.Preferences.LastActiveTenantID == tenantID {
@@ -465,6 +471,29 @@ func (s *tenantMemberService) cleanupRemovedMemberState(ctx context.Context, use
 			"RemoveMember cleanup: failed to revoke tokens for user %s after removing tenant %d: %v",
 			userID, tenantID, err)
 	}
+}
+
+// fallbackHomeTenant picks the user's new home tenant after a removal:
+// their lowest remaining active membership other than the removed tenant,
+// or 0 when nothing is left. Best-effort — lookup failures degrade to the
+// previous behavior (unset home).
+func (s *tenantMemberService) fallbackHomeTenant(ctx context.Context, userID string, removedTenantID uint64) uint64 {
+	fallback := uint64(0)
+	memberships, err := s.repo.ListByUser(ctx, userID)
+	if err != nil {
+		logger.Warnf(ctx,
+			"RemoveMember cleanup: failed to list remaining memberships for user %s: %v", userID, err)
+		return fallback
+	}
+	for _, m := range memberships {
+		if m == nil || m.TenantID == removedTenantID || m.Status != types.TenantMemberStatusActive {
+			continue
+		}
+		if fallback == 0 || m.TenantID < fallback {
+			fallback = m.TenantID
+		}
+	}
+	return fallback
 }
 
 // emitRemovalAudit picks AuditActionMemberLeft when the caller is
