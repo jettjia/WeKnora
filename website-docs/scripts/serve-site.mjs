@@ -21,4 +21,8 @@ const server = createServer(async (request, response) => {
     else createReadStream(file.path).pipe(response);
   } catch { response.writeHead(500).end('Unable to serve this page'); }
 });
-server.listen(port, '127.0.0.1', () => console.log(`WeKnora unified preview: http://127.0.0.1:${port}/`));
+// 0.0.0.0 so a Windows browser can reach the WSL2 (NAT mode) preview server,
+// same as vite's host:true. 127.0.0.1-bound sockets are not port-forwarded.
+const portHostIndex = process.argv.indexOf('--host');
+const host = portHostIndex < 0 ? '0.0.0.0' : process.argv[portHostIndex + 1];
+server.listen(port, host, () => console.log(`WeKnora unified preview: http://localhost:${port}/`));
