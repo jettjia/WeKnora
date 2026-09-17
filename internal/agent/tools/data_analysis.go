@@ -239,18 +239,15 @@ func (t *DataAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (*
 
 	// Check if this is a read-only query
 	normalizedSQL := strings.TrimSpace(strings.ToLower(input.Sql))
-	isReadOnly := strings.HasPrefix(normalizedSQL, "select") ||
-		strings.HasPrefix(normalizedSQL, "show") ||
-		strings.HasPrefix(normalizedSQL, "describe") ||
-		strings.HasPrefix(normalizedSQL, "explain") ||
-		strings.HasPrefix(normalizedSQL, "pragma")
+	isReadOnly := strings.HasPrefix(normalizedSQL, "select")
 
 	if !isReadOnly {
 		// Reject modification queries
 		logger.Warnf(ctx, "[Tool][DataAnalysis] Modification query rejected for session %s: %s", t.sessionID, input.Sql)
 		return &types.ToolResult{
 			Success: false,
-			Error:   "DuckDB tool only supports read-only queries (SELECT, SHOW, DESCRIBE, EXPLAIN, PRAGMA). Modification operations (INSERT, UPDATE, DELETE, CREATE, DROP, etc.) are not allowed.",
+			Error: "DuckDB tool only supports read-only SELECT queries. " +
+				"Modification operations and configuration statements are not allowed.",
 		}, fmt.Errorf("modification queries are not allowed")
 	}
 
@@ -258,6 +255,7 @@ func (t *DataAnalysisTool) Execute(ctx context.Context, args json.RawMessage) (*
 	// IMPORTANT: Must enable validateSelectStmt to block RangeFunction attacks
 	_, validation := utils.ValidateSQL(input.Sql,
 		utils.WithAllowedTables(schema.TableName),
+		utils.WithSelectOnly(),
 		utils.WithSingleStatement(),      // Block multiple statements
 		utils.WithNoDangerousFunctions(), // Block dangerous functions
 	)

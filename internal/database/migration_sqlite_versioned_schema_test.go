@@ -47,7 +47,7 @@ var versionedSQLiteColumns = map[string][]string{
 // This branch carries the semantic modeling module's sqlite migrations at
 // 000900/000901/000903 and the automation module's 000902 (all renumbered
 // out of upstream's low-number range), so the final sqlite migration
-// version is 903 rather than upstream's 16.
+// version is 903 rather than upstream's 17.
 const expectedSQLiteMigrationVersion = 903
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
