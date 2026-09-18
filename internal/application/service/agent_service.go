@@ -1336,6 +1336,10 @@ func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string
 		if kbType == "" {
 			kbType = "document" // Default type
 		}
+		var profile *types.KnowledgeBaseProfile
+		if kb.GeneratedProfile.HasText() {
+			profile = kb.GeneratedProfile
+		}
 		kbInfos = append(kbInfos, &agent.KnowledgeBaseInfo{
 			ID:           kb.ID,
 			Name:         kb.Name,
@@ -1344,6 +1348,7 @@ func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string
 			DocCount:     docCount,
 			Capabilities: kbRetrievalCapabilities(kb),
 			RecentDocs:   recentDocs,
+			Profile:      profile,
 		})
 	}
 

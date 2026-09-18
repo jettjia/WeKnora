@@ -326,7 +326,6 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
           </div>
         </div>
 
-
         <div class="cell cell-tag">
           <template v-if="item.tags && item.tags.length > 0">
             <t-tooltip v-if="hasTagOverflow(item.id, (item.tags || []).length)"
@@ -540,7 +539,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   top: 0;
   z-index: 3;
   height: 40px;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   font-weight: 500;
   font-family: var(--app-font-family);
   color: var(--td-text-color-secondary);
@@ -548,7 +547,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   border-bottom: 1px solid var(--td-component-stroke);
   border-radius: 8px 8px 0 0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transition: border-radius 0.15s ease, box-shadow 0.2s ease;
+  transition: border-radius var(--app-motion-fast) ease, box-shadow var(--app-motion-base) ease;
 
   &.is-stuck {
     border-radius: 0;
@@ -566,11 +565,11 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 .doc-list-row {
   position: relative;
   min-height: 60px;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   color: var(--td-text-color-primary);
   border-bottom: 1px solid var(--td-component-stroke);
   cursor: pointer;
-  transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: background-color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease, border-color var(--app-motion-base) ease;
 
   &:last-child {
     border-bottom: 0;
@@ -651,11 +650,11 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: var(--app-text-xl);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
 }
@@ -673,7 +672,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--td-text-color-primary);
@@ -684,7 +683,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-placeholder);
 }
 
@@ -702,9 +701,9 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
 .row-folder-meta,
 .row-folder-chevron {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-placeholder);
-  transition: color 0.15s ease;
+  transition: color var(--app-motion-fast) ease;
 }
 
 .row-file-folder {
@@ -718,9 +717,9 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   background: transparent;
   color: var(--td-text-color-placeholder);
   font-family: var(--app-font-family);
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: color var(--app-motion-fast) ease;
 
   &:hover {
     color: var(--td-brand-color);
@@ -735,7 +734,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
   .t-icon {
     flex: 0 0 auto;
-    font-size: 13px;
+    font-size: var(--app-text-md);
   }
 }
 
@@ -746,7 +745,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 
 .row-source-icon {
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: var(--app-text-base);
   color: var(--td-text-color-secondary);
 }
 
@@ -755,7 +754,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -788,13 +787,13 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   height: 20px;
   min-width: 20px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   border: 1px solid var(--td-component-stroke);
   color: var(--td-text-color-placeholder);
-  font-size: 10px;
+  font-size: var(--app-text-2xs);
   line-height: 1;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--app-motion-base) ease;
 
   &:hover {
     border-color: var(--td-brand-color);
@@ -804,10 +803,10 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 }
 
 .row-tag-add {
-  font-size: 11px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
   border: 1px dashed var(--td-component-stroke);
-  border-radius: 999px;
+  border-radius: var(--app-radius-pill);
   padding: 0 6px;
   height: 20px;
   display: inline-flex;
@@ -823,12 +822,12 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 }
 
 .row-muted {
-  color: var(--td-text-color-disabled, #bbb);
+  color: var(--td-text-color-disabled);
 }
 
 .row-mono {
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   font-family: var(--app-font-family);
   color: var(--td-text-color-secondary);
 }
@@ -838,13 +837,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
 }
 
 .icon-spin {
-  animation: doc-list-spin 0.9s linear infinite;
-}
-
-@keyframes doc-list-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: wk-spin 0.9s linear infinite;
 }
 
 .row-more-btn {
@@ -859,7 +852,7 @@ const handleAction = (action: 'download' | 'edit' | 'reparse' | 'cancel-parse' |
   color: var(--td-text-color-secondary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  transition: opacity var(--app-motion-fast) ease, background-color var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
 
   &:hover {
     background: var(--td-component-stroke);
