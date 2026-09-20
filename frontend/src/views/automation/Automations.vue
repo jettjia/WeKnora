@@ -27,28 +27,30 @@
       />
 
       <div class="automations-main">
-      <div v-if="filteredAutomations.length" class="card-grid">
+      <div v-if="loading" class="card-grid">
+        <div v-for="n in 6" :key="'skel-' + n" class="kb-style-card is-skeleton">
+          <div class="card-header"><t-skeleton animation="gradient" :row-col="[{ width: '60%', height: '20px' }]" /></div>
+          <div class="card-content"><t-skeleton animation="gradient" :row-col="[{ width: '100%', height: '14px' }, { width: '80%', height: '14px' }]" /></div>
+          <div class="card-bottom"><t-skeleton animation="gradient" :row-col="[[{ width: '28px', height: '28px', type: 'rect' }, { width: '28px', height: '28px', type: 'rect' }]]" /></div>
+        </div>
+      </div>
+      <div v-else-if="filteredAutomations.length" class="card-grid">
         <div v-for="a in filteredAutomations" :key="a.id" class="kb-style-card" @click="openEdit(a)">
+          <button type="button" class="kb-favorite-star" :class="{ 'is-favorited': isFavorited(a) }"
+            :aria-label="t('listSpaceSidebar.favorites')" :aria-pressed="isFavorited(a)"
+            @click.stop="toggleFavoriteAutomation(a)">
+            <t-icon :name="isFavorited(a) ? 'star-filled' : 'star'" size="14px" />
+          </button>
           <div class="card-header">
-            <span class="card-title" :title="a.name">
-              <button type="button" class="kb-favorite-star" :class="{ 'is-favorited': isFavorited(a) }"
-                @click.stop="toggleFavoriteAutomation(a)">
-                <svg viewBox="0 0 24 24" width="16" height="16">
-                  <path :fill="isFavorited(a) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8"
-                    stroke-linejoin="round"
-                    d="M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" />
-                </svg>
-              </button>
+            <span class="card-title" :title="a.title || a.name">
               <span class="card-title-text">{{ a.title || a.name }}</span>
               <span class="card-slug">{{ a.name }}</span>
             </span>
-            <div class="header-actions">
-              <t-switch :value="a.enabled" size="small" @click.stop @change="(v: unknown) => toggleEnabled(a, !!v)" />
-              <t-popup overlay-class-name="card-more-popup" trigger="click" destroy-on-close placement="bottom-right">
-                <div class="more-wrap" @click.stop>
-                  <img class="more-icon" src="@/assets/img/more.png" alt="" />
-                </div>
-                <template #content>
+            <t-popup overlay-class-name="card-more-popup" trigger="click" destroy-on-close placement="bottom-right">
+              <div class="more-wrap" @click.stop>
+                <img class="more-icon" src="@/assets/img/more.png" alt="" />
+              </div>
+              <template #content>
                   <div class="popup-menu" @click.stop>
                     <div v-if="canManage" class="popup-menu-item" @click.stop="runNow(a)">
                       <t-icon class="menu-icon" name="play-circle" />
@@ -68,16 +70,16 @@
                     </div>
                   </div>
                 </template>
-              </t-popup>
-            </div>
+            </t-popup>
           </div>
 
           <div class="card-content">
-            <div class="card-description">{{ a.description || a.query_template }}</div>
+            <div class="card-description" :title="a.description || a.query_template">{{ a.description || a.query_template }}</div>
           </div>
 
           <div class="card-bottom">
             <div class="bottom-left">
+              <t-switch :value="a.enabled" size="small" @click.stop @change="(v: unknown) => toggleEnabled(a, !!v)" />
               <div class="feature-badge status-badge" :class="lastStatusClass(a)">
                 <t-icon :name="lastStatusIcon(a)" size="14px" />
                 <span class="badge-text">{{ lastStatusLabel(a) }}</span>
@@ -126,6 +128,7 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 
 const automations = ref<Automation[]>([])
+const loading = ref(true)
 const agentOptions = ref<{ id: string; name: string }[]>([])
 const drawerRef = ref<InstanceType<typeof AutomationDrawer> | null>(null)
 const runsVisible = ref(false)
@@ -184,11 +187,14 @@ const emptyText = computed(() => {
 })
 
 async function reload() {
+  loading.value = true
   try {
     const resp = await listAutomations()
     automations.value = resp.automations || []
   } catch {
     automations.value = []
+  } finally {
+    loading.value = false
   }
 }
 
@@ -321,149 +327,19 @@ onMounted(() => {
   color: var(--td-text-color-secondary);
 }
 .card-grid {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-@media (min-width: 1250px) {
-  .card-grid { grid-template-columns: repeat(3, 1fr); }
-}
-@media (min-width: 1600px) {
-  .card-grid { grid-template-columns: repeat(4, 1fr); }
+  .resource-card-grid();
 }
 .kb-style-card {
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-md);
-  overflow: hidden;
-  box-sizing: border-box;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  background: var(--td-bg-color-container);
-  position: relative;
-  cursor: pointer;
-  transition: border-color var(--app-motion-base) ease, box-shadow var(--app-motion-base) ease;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  height: 136px;
-  min-height: 136px;
-}
-.kb-style-card:hover {
-  border-color: var(--td-brand-color);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--td-brand-color) 12%, transparent);
-}
-.kb-style-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 60px;
-  height: 60px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--td-brand-color) 8%, transparent) 0%, transparent 100%);
-  border-radius: 0 var(--app-radius-xl) 0 100%;
-  pointer-events: none;
-  z-index: 0;
-}
-.card-header, .card-content, .card-bottom {
-  position: relative;
-  z-index: 1;
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.card-title {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-}
-.kb-favorite-star {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--td-text-color-placeholder);
-  cursor: pointer;
-  align-self: center;
-  transition: color var(--app-motion-base) ease, transform var(--app-motion-fast) ease;
-}
-.kb-favorite-star:hover {
-  color: #f5a623;
-  transform: scale(1.1);
-}
-.kb-favorite-star.is-favorited {
-  color: #f5a623;
-}
-.card-title-text {
-  font-size: var(--app-text-xl);
-  font-weight: 500;
-  line-height: 22px;
-  color: var(--td-text-color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  .resource-card();
+  .kb-favorite-star {
+    .resource-favorite-button();
+  }
 }
 .card-slug {
   flex-shrink: 0;
   font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
   font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
-}
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.more-wrap {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--app-radius-sm);
-  flex-shrink: 0;
-}
-.more-wrap:hover {
-  background: var(--td-bg-color-secondarycontainer);
-}
-.more-icon {
-  width: 16px;
-  height: 16px;
-}
-.card-content {
-  flex: 1;
-  min-height: 0;
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-.card-description {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  color: var(--td-text-color-secondary);
-  font-size: var(--app-text-sm);
-  line-height: 18px;
-}
-.card-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: auto;
-  padding-top: 8px;
-  border-top: 0.5px solid var(--td-component-stroke);
 }
 .bottom-left {
   display: flex;

@@ -1,7 +1,14 @@
 <template>
   <div class="models-tab">
     <!-- 卡片网格: 对齐知识库/智能体列表的卡片语言 -->
-    <div v-if="visibleModels.length" class="card-grid">
+    <div v-if="loading" class="card-grid">
+      <div v-for="n in 6" :key="'skel-' + n" class="kb-style-card is-skeleton">
+        <div class="card-header"><t-skeleton animation="gradient" :row-col="[{ width: '60%', height: '20px' }]" /></div>
+        <div class="card-content"><t-skeleton animation="gradient" :row-col="[{ width: '100%', height: '14px' }, { width: '80%', height: '14px' }]" /></div>
+        <div class="card-bottom"><t-skeleton animation="gradient" :row-col="[[{ width: '28px', height: '28px', type: 'rect' }, { width: '28px', height: '28px', type: 'rect' }]]" /></div>
+      </div>
+    </div>
+    <div v-else-if="visibleModels.length" class="card-grid">
       <div v-for="m in visibleModels" :key="m.id" class="kb-style-card model-card" @click="openEditor(m)">
         <button type="button" class="kb-favorite-star" :class="{ 'is-favorited': isFavorited(m) }"
           @click.stop="toggleFavorite(m, $event)">
@@ -195,6 +202,7 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 
 const models = ref<SemanticModel[]>([])
+const loading = ref(true)
 const createVisible = ref(false)
 const createForm = ref<{ connection_id: string; tableRef: string[]; blank: boolean }>({
   connection_id: '',
@@ -300,8 +308,13 @@ function shortTime(ts: string) {
 }
 
 async function load() {
-  const resp = await listModels()
-  models.value = resp.models || []
+  loading.value = true
+  try {
+    const resp = await listModels()
+    models.value = resp.models || []
+  } finally {
+    loading.value = false
+  }
 }
 load()
 
@@ -474,7 +487,8 @@ function onSaved(updated: SemanticModel) {
 }
 </script>
 
-<style scoped>
+<style scoped lang="less">
+@import (reference) '@/components/css/resource-card.less';
 .create-hint {
   font-size: 12px;
   color: var(--td-text-color-placeholder);
@@ -496,153 +510,20 @@ function onSaved(updated: SemanticModel) {
 
 /* ---- 卡片网格与卡片样式: 复用知识库列表的卡片语言 ---- */
 .card-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr;
+  .resource-card-grid();
 }
-
-@media (min-width: 900px) {
-  .card-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
 .kb-style-card {
-  border: 1px solid var(--td-component-stroke);
-  border-radius: 8px;
-  overflow: hidden;
-  box-sizing: border-box;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  background: var(--td-bg-color-container);
-  position: relative;
-  cursor: pointer;
-  transition: all 0.25s ease;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  height: 136px;
-  min-height: 136px;
-}
-
-.kb-style-card:hover {
-  border-color: var(--td-brand-color);
-  box-shadow: 0 4px 12px rgba(7, 192, 95, 0.12);
-}
-
-.kb-style-card::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 60px;
-  height: 60px;
-  background: linear-gradient(135deg, rgba(7, 192, 95, 0.08) 0%, transparent 100%);
-  border-radius: 0 12px 0 100%;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.card-header,
-.card-content,
-.card-bottom {
-  position: relative;
-  z-index: 1;
-}
-
-@media (min-width: 1250px) {
-  .card-grid {
-    grid-template-columns: repeat(3, 1fr);
+  .resource-card();
+  .kb-favorite-star {
+    .resource-favorite-button();
   }
 }
-
-@media (min-width: 1600px) {
-  .card-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.card-title {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.card-title-text {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 22px;
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .card-slug {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-placeholder);
   font-family: 'SFMono-Regular', Consolas, Menlo, monospace;
 }
-
-.more-wrap {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.more-wrap:hover {
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.more-wrap .more-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.card-content {
-  flex: 1;
-  min-height: 0;
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-
-.card-description {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  color: var(--td-text-color-secondary);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 18px;
-}
-
-.card-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: auto;
-  padding-top: 8px;
-  border-top: 0.5px solid var(--td-component-stroke);
-}
-
 .bottom-left {
   display: flex;
   align-items: center;
@@ -651,116 +532,44 @@ function onSaved(updated: SemanticModel) {
   min-width: 0;
   overflow: hidden;
 }
-
 .bottom-right {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
 }
-
 .card-time {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-placeholder);
 }
-
 .feature-badge {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: var(--app-radius-sm);
   padding: 0 6px;
   cursor: default;
-  transition: background 0.2s ease;
-  font-size: 11px;
+  transition: background var(--app-motion-base) ease;
+  font-size: var(--app-text-xs);
   font-weight: 500;
 }
-
 .feature-badge.published {
-  background: rgba(7, 192, 95, 0.08);
+  background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
   color: var(--td-brand-color-active);
 }
-
 .feature-badge.draft {
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
 }
-
 .feature-badge.publish_failed {
-  background: rgba(227, 77, 89, 0.08);
+  background: color-mix(in srgb, var(--td-error-color) 8%, transparent);
   color: var(--td-error-color);
 }
-
 .feature-badge.conn-badge {
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
 }
 
-.kb-favorite-star {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 3;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
-}
-
-.kb-favorite-star:hover {
-  background: var(--td-bg-color-secondarycontainer);
-  color: var(--td-warning-color, #e37318);
-}
-
-.kb-favorite-star.is-favorited {
-  opacity: 1;
-  color: var(--td-warning-color, #e37318);
-}
-
-.kb-style-card:hover .kb-favorite-star {
-  opacity: 1;
-}
-
-/* ---- 空状态: 对齐知识库列表 ---- */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 64px 0;
-  color: var(--td-text-color-secondary);
-}
-
-.empty-state .empty-img {
-  width: 120px;
-  opacity: 0.8;
-}
-
-.empty-state .empty-txt {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
-.empty-state-btn {
-  margin-top: 8px;
-  background: linear-gradient(135deg, var(--td-brand-color) 0%, #00a67e 100%);
-  border: none;
-  color: var(--td-text-color-anti);
-}
-
-.empty-state-btn:hover {
-  background: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-active) 100%);
-}
 </style>
