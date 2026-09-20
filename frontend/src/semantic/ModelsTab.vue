@@ -83,20 +83,16 @@
       </div>
     </div>
 
-    <!-- 空状态: 对齐知识库列表 (搜索无结果时只给无结果文案, 不给空态引导和新建入口) -->
-    <div v-else class="empty-state">
-      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{
-        hasKeyword ? t('semantic.noResult')
-        : spaceSelection === 'favorites' ? t('semantic.model.emptyFavorites')
-        : spaceSelection === 'recents' ? t('semantic.model.emptyRecents')
-        : t('semantic.model.empty')
-      }}</span>
-      <t-button v-if="!hasKeyword && spaceSelection === 'all' && canEdit && connections.length" class="empty-state-btn" @click="openCreate">
+    <!-- 空状态: 与知识库列表同款 EmptyState (搜索无结果给清空入口) -->
+    <EmptyState v-else-if="hasKeyword" icon="search" :title="t('common.noResult')">
+      <t-button variant="outline" @click="emit('clearSearch')">{{ t('common.clear') }}</t-button>
+    </EmptyState>
+    <EmptyState v-else :image="uploadImg" :title="emptyText">
+      <t-button v-if="spaceSelection === 'all' && canEdit && connections.length" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.model.add') }}
       </t-button>
-    </div>
+    </EmptyState>
 
     <!-- 发布说明 -->
     <PublishNoteDialog v-model:visible="noteVisible" @confirm="doPublish" />
@@ -184,6 +180,8 @@ import { listMyOrganizations } from '@/api/organization'
 import ShareModelDialog from './ShareModelDialog.vue'
 import ModelEditor from './ModelEditor.vue'
 import PublishNoteDialog from './PublishNoteDialog.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import uploadImg from '@/assets/img/upload.svg'
 import { listFavorites, addFavorite, removeFavorite } from '@/api/user-favorites'
 import { useAuthStore } from '@/stores/auth'
 
@@ -197,7 +195,7 @@ const props = defineProps<{
   currentUserId: string
   cubeReady: boolean
 }>()
-const emit = defineEmits<{ (e: 'changed'): void }>()
+const emit = defineEmits<{ (e: 'changed'): void; (e: 'clearSearch'): void }>()
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -285,6 +283,12 @@ const visibleModels = computed(() => {
   return base.filter(m => `${m.title || ''} ${m.name} ${m.description || ''}`.toLowerCase().includes(kw))
 })
 const hasKeyword = computed(() => !!(props.search || '').trim())
+
+const emptyText = computed(() => {
+  if (props.spaceSelection === 'favorites') return t('semantic.model.emptyFavorites')
+  if (props.spaceSelection === 'recents') return t('semantic.model.emptyRecents')
+  return t('semantic.model.empty')
+})
 
 const count = computed(() => models.value.length)
 const currentUserId = computed(() => props.currentUserId)
@@ -572,6 +576,10 @@ function onSaved(updated: SemanticModel) {
 .feature-badge.conn-badge {
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
+}
+
+.empty-state-btn {
+  width: fit-content;
 }
 
 </style>

@@ -56,14 +56,15 @@
       </div>
     </div>
 
-    <div v-else class="empty-state">
-      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{ hasKeyword ? t('semantic.noResult') : t('semantic.action.empty') }}</span>
-      <t-button v-if="!hasKeyword && canManage" class="empty-state-btn" @click="openCreate">
+    <EmptyState v-else-if="hasKeyword" icon="search" :title="t('common.noResult')">
+      <t-button variant="outline" @click="emit('clearSearch')">{{ t('common.clear') }}</t-button>
+    </EmptyState>
+    <EmptyState v-else :image="uploadImg" :title="t('semantic.action.empty')">
+      <t-button v-if="canManage" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.action.add') }}
       </t-button>
-    </div>
+    </EmptyState>
 
     <!-- 编辑器: 对齐知识库数据源编辑的 SettingDrawer 设计 -->
     <SettingDrawer
@@ -228,6 +229,8 @@ import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { createAction, deleteAction, testAction, updateAction, type ActionInput, type ActionField, type Precondition, type SemanticAction, type DataGroup } from './api'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import uploadImg from '@/assets/img/upload.svg'
 
 const props = defineProps<{
   modelValue: SemanticAction[]
@@ -236,7 +239,7 @@ const props = defineProps<{
   groups: DataGroup[]
   search?: string
 }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: SemanticAction[]): void }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: SemanticAction[]): void; (e: 'clearSearch'): void }>()
 
 const { t } = useI18n()
 
@@ -822,22 +825,6 @@ defineExpose({ openCreate })
   color: var(--td-error-color);
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 40px 0;
-}
-.empty-state .empty-img {
-  width: 120px;
-  opacity: 0.8;
-}
-.empty-state .empty-txt {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
 .empty-state-btn {
   width: fit-content;
 }

@@ -312,9 +312,9 @@ onMounted(() => {
 .automations-main {
   .resource-list-main();
 }
-.header {
-  .resource-list-header();
-}
+/* 顶层调用: mixin 自带 .header 选择器, 嵌在 .header{} 里会展开成无效的 .header .header,
+   导致新建按钮丢失推右与胶囊样式 (与知识库页头不一致的根因) */
+.resource-list-header();
 .header-title h2 {
   margin: 0;
   font-size: var(--app-text-4xl);

@@ -84,13 +84,14 @@
         :can-publish="isAdmin"
         :current-user-id="authStore.currentUserId"
         :cube-ready="!!info?.cube_ready"
+        @clear-search="keyword = ''"
       />
       <ConnectionsTab v-show="activeType === 'connections'" ref="connectionsTabRef" v-model="connections"
-        :can-manage="isAdmin" :search="keyword" @changed="reloadGroups" />
+        :can-manage="isAdmin" :search="keyword" @changed="reloadGroups" @clear-search="keyword = ''" />
       <ActionsTab v-show="activeType === 'actions'" ref="actionsTabRef" v-model="actions" :can-manage="isAdmin"
-        :available-models="modelNames" :groups="groups" :search="keyword" />
+        :available-models="modelNames" :groups="groups" :search="keyword" @clear-search="keyword = ''" />
       <GroupsTab v-show="activeType === 'groups'" ref="groupsTabRef" v-model="groups" :can-manage="isAdmin"
-        :search="keyword" />
+        :search="keyword" @clear-search="keyword = ''" />
       </div>
 
       <!-- 审计日志抽屉 -->
