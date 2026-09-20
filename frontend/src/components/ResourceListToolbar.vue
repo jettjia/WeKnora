@@ -3,7 +3,9 @@
     <div v-if="!hideScopes" class="scope-filters">
       <div class="category-tabs" role="group" :aria-label="$t('listSpaceSidebar.all')">
         <button v-for="item in scopes" :key="item.value" type="button"
-          :aria-pressed="modelValue === item.value" @click="$emit('update:modelValue', item.value)">
+          :aria-pressed="modelValue === item.value"
+          :disabled="disabledScopes?.includes(item.value) ?? false"
+          @click="$emit('update:modelValue', item.value)">
           {{ item.label }}
           <span v-if="item.count !== undefined" class="scope-count">{{ item.count }}</span>
         </button>
@@ -42,6 +44,8 @@ const props = withDefaults(defineProps<{
   countCreated?: number
   countJoined?: number
   countByOrg?: Record<string, number>
+  /** 置灰禁用的 scope 值 (如资源类型不支持收藏/最近时) */
+  disabledScopes?: string[]
 }>(), { mode: 'resource', hideScopes: false, countByOrg: () => ({}) })
 defineEmits<{
   'update:modelValue': [value: string]
@@ -87,6 +91,7 @@ onMounted(() => { if (!props.hideScopes) orgStore.fetchOrganizations() })
 }
 .category-tabs { .artifact-filter-tabs(); }
 .scope-count { margin-left: 5px; font-size: var(--app-text-xs); opacity: 0.65; font-variant-numeric: tabular-nums; }
+.category-tabs button:disabled { opacity: 0.45; cursor: not-allowed; }
 .space-filter { width: 180px; }
 .space-filter-icon-active { color: var(--td-brand-color); }
 .search-input { width: 260px; max-width: 100%; margin-left: auto; }

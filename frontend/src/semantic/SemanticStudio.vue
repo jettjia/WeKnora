@@ -57,14 +57,14 @@
       </div>
 
       <ResourceListToolbar
-        :model-value="spaceSelection"
-        @update:model-value="onScopeChange"
+        v-model="toolbarScope"
         v-model:query="keyword"
         :hide-scopes="authStore.isLiteMode"
         :count-all="scopeCounts.all"
         :count-mine="scopeCounts.mine"
         :count-favorites="scopeCounts.favorites"
         :count-recents="scopeCounts.recents"
+        :disabled-scopes="scopeCounts.disabled"
       />
 
       <div class="semantic-studio-main">
@@ -180,32 +180,31 @@ const typeOptions = computed<{ key: SemanticTypeKey; icon: string; label: string
 const activeTypeMeta = computed(() => typeOptions.value.find(o => o.key === activeType.value) ?? typeOptions.value[0])
 
 function switchType(key: SemanticTypeKey) {
+  // 各类型完全隔离: scope 选择只作用于模型 (收藏/最近/本空间是模型的能力),
+  // 其他类型固定「全部」且对应 scope 置灰, 切换不串数据
   activeType.value = key
-  // scope 视图 (收藏/最近/本空间) 只对模型有意义: 切到其他类型时回到「全部」,
-  // 避免「scope 高亮但列表未过滤」的错位
-  if (key !== 'models') spaceSelection.value = 'all'
 }
 
-// scope 计数跟随当前类型; 收藏/最近/本空间仅模型有数据, 其他类型如实显示 0
-const scopeCounts = computed(() => {
-  switch (activeType.value) {
-    case 'connections':
-      return { all: connections.value.length, mine: 0, favorites: 0, recents: 0 }
-    case 'actions':
-      return { all: actions.value.length, mine: 0, favorites: 0, recents: 0 }
-    case 'groups':
-      return { all: groups.value.length, mine: 0, favorites: 0, recents: 0 }
-    default:
-      return { all: modelCount.value, mine: mineCount.value, favorites: favoriteCount.value, recents: recentCount.value }
-  }
+// scope 选择只驱动模型列表; 其他类型下工具栏固定显示「全部」
+const toolbarScope = computed({
+  get: () => (activeType.value === 'models' ? spaceSelection.value : 'all'),
+  set: (v: string) => { spaceSelection.value = v }
 })
 
-// scope 行是模型视图的筛选器: 在非模型类型上选了非「全部」的 scope,
-// 跳回模型列表让过滤真实生效 (而不是高亮着却不过滤)
-function onScopeChange(value: string) {
-  spaceSelection.value = value
-  if (value !== 'all' && activeType.value !== 'models') activeType.value = 'models'
-}
+// scope 计数跟随当前类型; 收藏/最近/本空间仅模型支持, 其他类型不显示计数
+// (disabled) 并置灰, 与模型视图完全隔离
+const scopeCounts = computed<{ all: number; mine?: number; favorites?: number; recents?: number; disabled: string[] }>(() => {
+  if (activeType.value === 'models') {
+    return { all: modelCount.value, mine: mineCount.value, favorites: favoriteCount.value, recents: recentCount.value, disabled: [] }
+  }
+  const totals: Record<SemanticTypeKey, number> = {
+    models: modelCount.value,
+    connections: connections.value.length,
+    actions: actions.value.length,
+    groups: groups.value.length
+  }
+  return { all: totals[activeType.value], disabled: ['favorites', 'recents', 'mine'] }
+})
 
 const canAddActive = computed(() =>
   activeType.value === 'models' ? canEdit.value && spaceSelection.value === 'all' : isAdmin.value
