@@ -312,8 +312,27 @@ onMounted(() => {
 .automations-main {
   .resource-list-main();
 }
-/* 顶层调用: mixin 自带 .header 选择器, 嵌在 .header{} 里会展开成无效的 .header .header,
-   导致新建按钮丢失推右与胶囊样式 (与知识库页头不一致的根因) */
+/* 页头布局: 与知识库页头同构 — mixin 只补间距/按钮样式, flex 布局由本页提供
+   (h2 的 margin-right:auto 依赖 .title-row 的 display:flex, 新建按钮才会推到右上角) */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 28px;
+
+  .header-title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+/* 顶层调用: mixin 自带 .header 选择器, 嵌在 .header{} 里会展开成无效的 .header .header */
 .resource-list-header();
 .header-title h2 {
   margin: 0;
