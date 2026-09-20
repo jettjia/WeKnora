@@ -51,15 +51,16 @@
       </div>
     </div>
 
-    <!-- 空状态: 对齐知识库列表 (搜索无结果时只给无结果文案, 不给空态引导和新建入口) -->
-    <div v-else class="empty-state">
-      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{ hasKeyword ? t('semantic.noResult') : t('semantic.group.empty') }}</span>
-      <t-button v-if="!hasKeyword && canManage" class="empty-state-btn" @click="openCreate">
+    <!-- 空状态: 与知识库列表同款 EmptyState (搜索无结果给清空入口) -->
+    <EmptyState v-else-if="hasKeyword" icon="search" :title="t('common.noResult')">
+      <t-button variant="outline" @click="emit('clearSearch')">{{ t('common.clear') }}</t-button>
+    </EmptyState>
+    <EmptyState v-else :image="uploadImg" :title="t('semantic.group.empty')">
+      <t-button v-if="canManage" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.group.add') }}
       </t-button>
-    </div>
+    </EmptyState>
 
     <t-dialog
       v-model:visible="dialogVisible"
@@ -118,13 +119,15 @@ import { createGroup, deleteGroup, getGroupUsage, listGroupMembers, setGroupMemb
 import { listMemberCandidates } from './api'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
+import EmptyState from '@/components/EmptyState.vue'
+import uploadImg from '@/assets/img/upload.svg'
 
 const props = defineProps<{
   modelValue: DataGroup[]
   canManage: boolean
   search?: string
 }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: DataGroup[]): void }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: DataGroup[]): void; (e: 'clearSearch'): void }>()
 
 const { t } = useI18n()
 const router = useRouter()
@@ -551,36 +554,7 @@ defineExpose({ openCreate })
   color: var(--td-brand-color);
 }
 
-/* ---- 空状态: 对齐知识库列表 ---- */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 64px 0;
-  color: var(--td-text-color-secondary);
-}
-
-.empty-state .empty-img {
-  width: 120px;
-  opacity: 0.8;
-}
-
-.empty-state .empty-txt {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
 .empty-state-btn {
-  margin-top: 8px;
-  background: linear-gradient(135deg, var(--td-brand-color) 0%, #00a67e 100%);
-  border: none;
-  color: var(--td-text-color-anti);
-}
-
-.empty-state-btn:hover {
-  background: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-active) 100%);
+  width: fit-content;
 }
 </style>

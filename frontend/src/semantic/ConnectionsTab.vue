@@ -60,15 +60,16 @@
       </div>
     </div>
 
-    <!-- 空状态: 对齐知识库列表 (搜索无结果时只给无结果文案, 不给空态引导和新建入口) -->
-    <div v-else class="empty-state">
-      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{ hasKeyword ? t('semantic.noResult') : t('semantic.conn.empty') }}</span>
-      <t-button v-if="!hasKeyword && canManage" class="empty-state-btn" @click="openCreate">
+    <!-- 空状态: 与知识库列表同款 EmptyState (搜索无结果给清空入口) -->
+    <EmptyState v-else-if="hasKeyword" icon="search" :title="t('common.noResult')">
+      <t-button variant="outline" @click="emit('clearSearch')">{{ t('common.clear') }}</t-button>
+    </EmptyState>
+    <EmptyState v-else :image="uploadImg" :title="t('semantic.conn.empty')">
+      <t-button v-if="canManage" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.conn.add') }}
       </t-button>
-    </div>
+    </EmptyState>
 
     <t-dialog
       v-model:visible="dialogVisible"
@@ -137,13 +138,15 @@ import {
   type ConnectionInfo,
   type ConnectionInput
 } from './api'
+import EmptyState from '@/components/EmptyState.vue'
+import uploadImg from '@/assets/img/upload.svg'
 
 const props = defineProps<{
   modelValue: ConnectionInfo[]
   canManage: boolean
   search?: string
 }>()
-const emit = defineEmits<{ (e: 'update:modelValue', v: ConnectionInfo[]): void; (e: 'changed'): void }>()
+const emit = defineEmits<{ (e: 'update:modelValue', v: ConnectionInfo[]): void; (e: 'changed'): void; (e: 'clearSearch'): void }>()
 
 const { t } = useI18n()
 
@@ -551,36 +554,7 @@ defineExpose({ openCreate })
   color: var(--td-error-color);
 }
 
-/* ---- 空状态: 对齐知识库列表 ---- */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 64px 0;
-  color: var(--td-text-color-secondary);
-}
-
-.empty-state .empty-img {
-  width: 120px;
-  opacity: 0.8;
-}
-
-.empty-state .empty-txt {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--td-text-color-primary);
-}
-
 .empty-state-btn {
-  margin-top: 8px;
-  background: linear-gradient(135deg, var(--td-brand-color) 0%, #00a67e 100%);
-  border: none;
-  color: var(--td-text-color-anti);
-}
-
-.empty-state-btn:hover {
-  background: linear-gradient(135deg, var(--td-brand-color) 0%, var(--td-brand-color-active) 100%);
+  width: fit-content;
 }
 </style>

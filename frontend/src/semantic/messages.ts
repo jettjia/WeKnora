@@ -15,7 +15,6 @@ export const zhCN = {
     actions: 'Webhook 动作, 让智能体写回业务系统',
     groups: '按组控制谁可以查哪些数据',
   },
-  noResult: '没有匹配的结果',
   conn: {
     add: '添加数据源',
     edit: '编辑数据源',
@@ -234,7 +233,6 @@ export const enUS = {
     actions: 'Webhook actions that write back to business systems',
     groups: 'Control who can query what, per group',
   },
-  noResult: 'No matching results',
   conn: {
     add: 'Add Data Source',
     edit: 'Edit Data Source',
@@ -455,7 +453,6 @@ export const ruRU = {
     actions: 'Webhook-действия для записи в бизнес-системы',
     groups: 'Управление доступом к данным по группам',
   },
-  noResult: 'Нет совпадений',
   conn: {
     add: 'Добавить источник данных',
     edit: 'Изменить источник данных',
@@ -674,7 +671,6 @@ export const jaJP = {
     actions: '業務システムへ書き戻す Webhook アクション',
     groups: 'グループごとにデータ参照権限を管理',
   },
-  noResult: '一致する結果はありません',
   conn: {
     add: 'データソースを追加',
     edit: 'データソースを編集',
@@ -893,7 +889,6 @@ export const koKR = {
     actions: '비즈니스 시스템에 쓰기 작업을 하는 웹훅 액션',
     groups: '그룹별 데이터 조회 권한 관리',
   },
-  noResult: '일치하는 결과가 없습니다',
   conn: {
     add: '데이터 소스 추가',
     edit: '데이터 소스 편집',
