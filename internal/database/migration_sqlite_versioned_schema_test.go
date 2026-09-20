@@ -26,7 +26,7 @@ var versionedSQLiteTables = []string{
 	"browser_devices",
 	"browser_pairings",
 	"browser_task_interruptions",
-	// 000902 automation module / 000903 semantic model share
+	// fork 000003 automation module / 000004 semantic model share
 	"automations",
 	"automation_runs",
 	"semantic_model_shares",
@@ -54,11 +54,14 @@ var versionedSQLiteColumns = map[string][]string{
 	"message_artifacts":  {"deleted_at"},                                                       // 000107
 }
 
-// This branch carries the semantic modeling module's sqlite migrations at
-// 000900/000901/000903 and the automation module's 000902 (all renumbered
-// out of upstream's low-number range), so the final sqlite migration
-// version is 903 rather than upstream's 25.
-const expectedSQLiteMigrationVersion = 903
+// The fork modules (semantic modeling / automation) migrate from
+// migrations/fork-sqlite against their own fork_schema_migrations table, so
+// the main watermark stays at upstream's latest sqlite migration (000026)
+// while the fork watermark ends at the fork set's latest (000004).
+const (
+	expectedSQLiteMigrationVersion     = 26
+	expectedForkSQLiteMigrationVersion = 4
+)
 
 func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	repoRoot := sqliteRepoRoot(t)
@@ -71,6 +74,9 @@ func TestSQLiteMigrationsCreateVersionedSchema(t *testing.T) {
 	version, dirty := sqliteMigrationState(t, db)
 	require.Equal(t, expectedSQLiteMigrationVersion, version)
 	require.False(t, dirty)
+	forkVersion, forkDirty := sqliteForkMigrationState(t, db)
+	require.Equal(t, expectedForkSQLiteMigrationVersion, forkVersion)
+	require.False(t, forkDirty)
 
 	for _, table := range versionedSQLiteTables {
 		require.Truef(t, sqliteTableExists(t, db, table), "SQLite migrations must create table %s", table)
@@ -130,6 +136,9 @@ func TestSQLiteMigrationsUpgradeV4PreservesData(t *testing.T) {
 	versionAfter, dirtyAfter := sqliteMigrationState(t, db)
 	require.Equal(t, expectedSQLiteMigrationVersion, versionAfter)
 	require.False(t, dirtyAfter)
+	forkAfter, forkDirtyAfter := sqliteForkMigrationState(t, db)
+	require.Equal(t, expectedForkSQLiteMigrationVersion, forkAfter)
+	require.False(t, forkDirtyAfter)
 
 	for _, table := range versionedSQLiteTables {
 		require.Truef(t, sqliteTableExists(t, db, table), "upgraded SQLite DB must have table %s", table)
@@ -184,6 +193,9 @@ func TestSQLiteMigrationsUpgradeV16AddsSessionForkColumns(t *testing.T) {
 	versionAfter, dirtyAfter := sqliteMigrationState(t, db)
 	require.Equal(t, expectedSQLiteMigrationVersion, versionAfter)
 	require.False(t, dirtyAfter)
+	forkAfter, forkDirtyAfter := sqliteForkMigrationState(t, db)
+	require.Equal(t, expectedForkSQLiteMigrationVersion, forkAfter)
+	require.False(t, forkDirtyAfter)
 	for _, column := range versionedSQLiteColumns["sessions"] {
 		require.Truef(
 			t,
@@ -221,6 +233,12 @@ func openSQLiteDB(t *testing.T, dbPath string) *sql.DB {
 func sqliteMigrationState(t *testing.T, db *sql.DB) (version int, dirty bool) {
 	t.Helper()
 	require.NoError(t, db.QueryRow("SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty))
+	return version, dirty
+}
+
+func sqliteForkMigrationState(t *testing.T, db *sql.DB) (version int, dirty bool) {
+	t.Helper()
+	require.NoError(t, db.QueryRow("SELECT version, dirty FROM fork_schema_migrations").Scan(&version, &dirty))
 	return version, dirty
 }
 
@@ -356,25 +374,37 @@ func copySQLiteMigrationsThrough(t *testing.T, repoRoot string, maxVersion int) 
 	destDir := filepath.Join(dest, "migrations", "sqlite")
 	require.NoError(t, os.MkdirAll(destDir, 0o755))
 
-	entries, err := os.ReadDir(srcDir)
-	require.NoError(t, err)
-	copied := 0
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".up.sql") {
-			continue
+	// The fork set is versioned independently of the main sequence, so legacy
+	// roots always carry it in full — that mirrors the one-time server cutover
+	// where an old database first meets the fork_schema_migrations table.
+	copyDir := func(src, dst string, capVersion bool) int {
+		t.Helper()
+		entries, err := os.ReadDir(src)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(dst, 0o755))
+		count := 0
+		for _, entry := range entries {
+			name := entry.Name()
+			if entry.IsDir() || !strings.HasSuffix(name, ".up.sql") {
+				continue
+			}
+			if capVersion {
+				var version int
+				_, scanErr := fmt.Sscanf(name, "%d_", &version)
+				require.NoError(t, scanErr, "sqlite migration filename %s", name)
+				if version > maxVersion {
+					continue
+				}
+			}
+			data, readErr := os.ReadFile(filepath.Join(src, name))
+			require.NoError(t, readErr)
+			require.NoError(t, os.WriteFile(filepath.Join(dst, name), data, 0o600))
+			count++
 		}
-		var version int
-		_, scanErr := fmt.Sscanf(name, "%d_", &version)
-		require.NoError(t, scanErr, "sqlite migration filename %s", name)
-		if version > maxVersion {
-			continue
-		}
-		data, readErr := os.ReadFile(filepath.Join(srcDir, name))
-		require.NoError(t, readErr)
-		require.NoError(t, os.WriteFile(filepath.Join(destDir, name), data, 0o600))
-		copied++
+		return count
 	}
-	require.Greater(t, copied, 0)
+
+	require.Greater(t, copyDir(srcDir, destDir, true), 0)
+	copyDir(filepath.Join(repoRoot, "migrations", "fork-sqlite"), filepath.Join(dest, "migrations", "fork-sqlite"), false)
 	return dest
 }

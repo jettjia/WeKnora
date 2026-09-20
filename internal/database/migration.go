@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -63,7 +64,7 @@ func setMigrationState(version uint, dirty bool, errMsg string, versionKnown boo
 // captureMigrationFailure best-effort queries m for the current version so the
 // system info endpoint can show "N (failed)" instead of vanishing the row, and
 // stores the human-readable error message. Always returns the original error.
-func captureMigrationFailure(m *migrate.Migrate, err error) error {
+func captureMigrationFailure(m *migrate.Migrate, err error, fork bool) error {
 	versionKnown := false
 	var ver uint
 	var dirty bool
@@ -74,7 +75,9 @@ func captureMigrationFailure(m *migrate.Migrate, err error) error {
 			ver, dirty = v, d
 		}
 	}
-	setMigrationState(ver, dirty, err.Error(), versionKnown)
+	if !fork {
+		setMigrationState(ver, dirty, err.Error(), versionKnown)
+	}
 	return err
 }
 
@@ -97,15 +100,83 @@ type MigrationOptions struct {
 	SQLiteDBPath string
 }
 
-// RunMigrationsWithOptions executes all pending database migrations with custom options
+// forkMigrationsTable is the bookkeeping table for the fork migration set
+// (migrations/fork | migrations/fork-sqlite). A separate table keeps the
+// fork's watermark from interfering with upstream's schema_migrations.
+const forkMigrationsTable = "fork_schema_migrations"
+
+// withMigrationsTable appends golang-migrate's x-migrations-table query
+// parameter so a source set can keep its own bookkeeping table.
+func withMigrationsTable(dsn string, table string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return dsn
+	}
+	q := u.Query()
+	q.Set("x-migrations-table", table)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// migrationsTableFor returns the bookkeeping table for a source set. The
+// upstream set keeps golang-migrate's default table; the fork set uses its own.
+func migrationsTableFor(fork bool) string {
+	if fork {
+		return forkMigrationsTable
+	}
+	return ""
+}
+
+// RunMigrationsWithOptions executes all pending database migrations with custom options.
+//
+// Two independent migration sequences run in order:
+//  1. the upstream set (migrations/versioned | migrations/sqlite), tracked in
+//     schema_migrations — kept byte-for-byte compatible with official WeKnora;
+//  2. the fork set (migrations/fork | migrations/fork-sqlite), tracked in
+//     fork_schema_migrations, holding the semantic modeling / automation
+//     modules' schema.
+//
+// Separate directories and bookkeeping tables keep the fork's watermark from
+// shadowing low-numbered migrations upstream adds later, so both sequences
+// auto-apply on startup exactly like the official project.
 func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
+	if err := runMigrationSource(dsn, opts, false); err != nil {
+		return err
+	}
+	return runMigrationSource(dsn, opts, true)
+}
+
+// runMigrationSource migrates one source set. fork selects the fork-specific
+// directories and bookkeeping table; the cached migration state (system info
+// endpoint) only reflects the upstream set.
+func runMigrationSource(dsn string, opts MigrationOptions, fork bool) error {
 	ctx := context.Background()
 
-	logger.Infof(ctx, "Starting database migration...")
+	source := "upstream"
+	if fork {
+		source = "fork"
+	}
 
-	migrationsPath := "file://migrations/versioned"
-	if strings.HasPrefix(dsn, "sqlite3://") {
-		migrationsPath = "file://migrations/sqlite"
+	mainPath, forkPath := "file://migrations/versioned", "file://migrations/fork"
+	if strings.HasPrefix(dsn, "sqlite3://") || opts.SQLiteDBPath != "" {
+		mainPath, forkPath = "file://migrations/sqlite", "file://migrations/fork-sqlite"
+	}
+	migrationsPath := mainPath
+	if fork {
+		migrationsPath = forkPath
+	}
+
+	logger.Infof(ctx, "Starting %s database migration (%s)...", source, migrationsPath)
+
+	// Only the upstream run feeds the cached state shown on the system info
+	// page; the fork run reports through logs and its return value.
+	recordState := func(version uint, dirty bool, errMsg string, versionKnown bool) {
+		if !fork {
+			setMigrationState(version, dirty, errMsg, versionKnown)
+		}
+	}
+	fail := func(m *migrate.Migrate, err error) error {
+		return captureMigrationFailure(m, err, fork)
 	}
 
 	var m *migrate.Migrate
@@ -114,31 +185,35 @@ func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
 		if err != nil {
 			logger.Errorf(ctx, "Failed to open sqlite db for migration: %v", err)
 			wrapped := fmt.Errorf("failed to open sqlite db for migration: %w", err)
-			setMigrationState(0, false, wrapped.Error(), false)
+			recordState(0, false, wrapped.Error(), false)
 			return wrapped
 		}
-		driver, err := sqlite3migrate.WithInstance(sqlDB, &sqlite3migrate.Config{})
+		driver, err := sqlite3migrate.WithInstance(sqlDB, &sqlite3migrate.Config{MigrationsTable: migrationsTableFor(fork)})
 		if err != nil {
 			sqlDB.Close()
 			logger.Errorf(ctx, "Failed to create sqlite3 migrate driver: %v", err)
 			wrapped := fmt.Errorf("failed to create sqlite3 migrate driver: %w", err)
-			setMigrationState(0, false, wrapped.Error(), false)
+			recordState(0, false, wrapped.Error(), false)
 			return wrapped
 		}
 		m, err = migrate.NewWithDatabaseInstance(migrationsPath, "sqlite3", driver)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to create migrate instance: %v", err)
 			wrapped := fmt.Errorf("failed to create migrate instance: %w", err)
-			setMigrationState(0, false, wrapped.Error(), false)
+			recordState(0, false, wrapped.Error(), false)
 			return wrapped
 		}
 	} else {
 		var err error
-		m, err = migrate.New(migrationsPath, dsn)
+		sourceDSN := dsn
+		if fork {
+			sourceDSN = withMigrationsTable(dsn, forkMigrationsTable)
+		}
+		m, err = migrate.New(migrationsPath, sourceDSN)
 		if err != nil {
 			logger.Errorf(ctx, "Failed to create migrate instance: %v", err)
 			wrapped := fmt.Errorf("failed to create migrate instance: %w", err)
-			setMigrationState(0, false, wrapped.Error(), false)
+			recordState(0, false, wrapped.Error(), false)
 			return wrapped
 		}
 	}
@@ -148,7 +223,7 @@ func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
 	oldVersion, oldDirty, versionErr := m.Version()
 	if versionErr != nil && versionErr != migrate.ErrNilVersion {
 		logger.Errorf(ctx, "Failed to get migration version: %v", versionErr)
-		return captureMigrationFailure(m, fmt.Errorf("failed to get migration version: %w", versionErr))
+		return fail(m, fmt.Errorf("failed to get migration version: %w", versionErr))
 	}
 
 	if versionErr == migrate.ErrNilVersion {
@@ -163,7 +238,7 @@ func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
 		if opts.AutoRecoverDirty {
 			logger.Infof(ctx, "AutoRecoverDirty is enabled, attempting recovery...")
 			if err := recoverFromDirtyState(ctx, m, oldVersion); err != nil {
-				return captureMigrationFailure(m, err)
+				return fail(m, err)
 			}
 			// Update oldVersion after recovery
 			oldVersion, _, _ = m.Version()
@@ -173,7 +248,7 @@ func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
 			if oldVersion == 0 || forceVersion < 0 {
 				forceVersion = 0
 			}
-			return captureMigrationFailure(m, fmt.Errorf(
+			return fail(m, fmt.Errorf(
 				"database is in dirty state at version %d. This usually means a migration failed partway through. "+
 					"To fix this:\n"+
 					"1. Check if the migration partially applied changes and manually fix if needed\n"+
@@ -202,13 +277,13 @@ func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
 				logger.Infof(ctx, "Attempting to recover from dirty state...")
 				// Try to recover and retry
 				if recoverErr := recoverFromDirtyState(ctx, m, currentVersion); recoverErr != nil {
-					return captureMigrationFailure(m, recoverErr)
+					return fail(m, recoverErr)
 				}
 				// Retry migration after recovery
 				logger.Infof(ctx, "Retrying migration after recovery...")
 				if retryErr := m.Up(); retryErr != nil && retryErr != migrate.ErrNoChange {
 					logger.Errorf(ctx, "Migration failed after recovery attempt: %v", retryErr)
-					return captureMigrationFailure(m, fmt.Errorf("migration failed after recovery attempt: %w", retryErr))
+					return fail(m, fmt.Errorf("migration failed after recovery attempt: %w", retryErr))
 				}
 			} else {
 				// Calculate the version to force to (usually the previous version)
@@ -216,7 +291,7 @@ func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
 				if currentVersion == 0 {
 					forceVersion = 0
 				}
-				return captureMigrationFailure(m, fmt.Errorf(
+				return fail(m, fmt.Errorf(
 					"migration failed and database is now in dirty state at version %d. "+
 						"To fix this:\n"+
 						"1. Check if the migration partially applied changes and manually fix if needed\n"+
@@ -232,26 +307,26 @@ func RunMigrationsWithOptions(dsn string, opts MigrationOptions) error {
 				))
 			}
 		} else {
-			return captureMigrationFailure(m, fmt.Errorf("failed to run migrations: %w", err))
+			return fail(m, fmt.Errorf("failed to run migrations: %w", err))
 		}
 	}
 
 	// Get current version after migration
 	version, dirty, err := m.Version()
 	if err != nil && err != migrate.ErrNilVersion {
-		return captureMigrationFailure(m, fmt.Errorf("failed to get migration version: %w", err))
+		return fail(m, fmt.Errorf("failed to get migration version: %w", err))
 	}
 
-	setMigrationState(version, dirty, "", true)
+	recordState(version, dirty, "", true)
 
 	if oldVersion != version {
-		logger.Infof(ctx, "Database migrated from version %d to %d", oldVersion, version)
+		logger.Infof(ctx, "%s migrations: database migrated from version %d to %d", source, oldVersion, version)
 	} else {
-		logger.Infof(ctx, "Database is up to date (version: %d)", version)
+		logger.Infof(ctx, "%s migrations: database is up to date (version: %d)", source, version)
 	}
 
 	if dirty {
-		logger.Warnf(ctx, "Database is in dirty state! Manual intervention may be required.")
+		logger.Warnf(ctx, "%s migrations: database is in dirty state! Manual intervention may be required.", source)
 	}
 
 	return nil

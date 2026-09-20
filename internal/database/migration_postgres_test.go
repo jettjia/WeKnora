@@ -43,18 +43,27 @@ func TestPostgresMigrationsServeAgentHistory(t *testing.T) {
 	require.NoError(t, db.QueryRow("SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty))
 	require.Equal(t, latestVersionedMigration(t, root), version)
 	require.False(t, dirty)
+	// The fork set (semantic modeling / automation) migrates on its own
+	// watermark table, so the upstream watermark stays untouched by it.
+	var forkVersion int
+	require.NoError(t, db.QueryRow("SELECT version, dirty FROM fork_schema_migrations").Scan(&forkVersion, &dirty))
+	require.Equal(t, latestForkMigration(t, root), forkVersion)
+	require.False(t, dirty)
 	requirePostgresIndexValid(t, db)
 
 	// Down and up again: DROP/CREATE INDEX CONCURRENTLY through golang-migrate.
+	// Pinned to 000106 (the migration that owns the index) instead of stepping
+	// relative to the tip — a newer migration on top would otherwise make the
+	// relative step miss it.
 	m, err := migrate.New("file://migrations/versioned", dsn)
 	require.NoError(t, err)
 	t.Cleanup(func() { _, _ = m.Close() })
-	require.NoError(t, m.Steps(-1))
+	require.NoError(t, m.Migrate(105))
 	var indexes int
 	require.NoError(t, db.QueryRow(
 		"SELECT count(*) FROM pg_class WHERE relname = 'idx_messages_session_created_id'").Scan(&indexes))
 	require.Zero(t, indexes, "the down migration drops the index")
-	require.NoError(t, m.Steps(1))
+	require.NoError(t, m.Migrate(106))
 	requirePostgresIndexValid(t, db)
 
 	ctx := context.Background()
@@ -98,7 +107,17 @@ func requirePostgresIndexValid(t *testing.T, db *sql.DB) {
 
 func latestVersionedMigration(t *testing.T, root string) int {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(root, "migrations", "versioned"))
+	return latestMigrationIn(t, filepath.Join(root, "migrations", "versioned"))
+}
+
+func latestForkMigration(t *testing.T, root string) int {
+	t.Helper()
+	return latestMigrationIn(t, filepath.Join(root, "migrations", "fork"))
+}
+
+func latestMigrationIn(t *testing.T, dir string) int {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
 	latest := 0
 	for _, e := range entries {
