@@ -34,6 +34,7 @@
         :count-recents="recentCount"
       />
 
+      <div class="semantic-studio-main">
       <t-alert v-if="connectionsLoaded && !connections.length" theme="info" class="conn-hint">
         {{ t('semantic.info.noConnection') }}
       </t-alert>
@@ -86,14 +87,6 @@
         </div>
       </div>
 
-      <!-- 审计日志抽屉 -->
-      <t-drawer v-model:visible="auditVisible" :header="t('semantic.audit.title')" size="560px" :footer="false">
-        <t-table row-key="id" :data="auditLogs" :columns="auditColumns" size="small" max-height="70vh">
-          <template #action="{ row }"><code class="audit-action">{{ row.action }}</code></template>
-          <template #time="{ row }"><span class="audit-time">{{ row.created_at }}</span></template>
-        </t-table>
-      </t-drawer>
-
       <!-- 操作类型 (Action) -->
       <div v-if="spaceSelection === 'all'" class="section-block">
         <div class="kb-section-header" @click="toggleSection('actions')">
@@ -132,6 +125,16 @@
           <GroupsTab ref="groupsTabRef" v-model="groups" :can-manage="isAdmin" />
         </div>
       </div>
+      </div>
+
+      <!-- 审计日志抽屉 -->
+      <t-drawer v-model:visible="auditVisible" :header="t('semantic.audit.title')" size="560px" :footer="false">
+        <t-table row-key="id" :data="auditLogs" :columns="auditColumns" size="small" max-height="70vh">
+          <template #action="{ row }"><code class="audit-action">{{ row.action }}</code></template>
+          <template #time="{ row }"><span class="audit-time">{{ row.created_at }}</span></template>
+        </t-table>
+      </t-drawer>
+
     </div>
   </div>
 </template>
@@ -240,7 +243,11 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="less">
+@import (reference) '@/components/css/resource-card.less';
+.semantic-studio-main {
+  .resource-list-main();
+}
 .semantic-studio-container {
   height: 100%;
   display: flex;
@@ -256,8 +263,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   padding: 20px 28px 0 20px;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .header {

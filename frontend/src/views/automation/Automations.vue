@@ -26,6 +26,7 @@
         :count-recents="recentsCount"
       />
 
+      <div class="automations-main">
       <div v-if="filteredAutomations.length" class="card-grid">
         <div v-for="a in filteredAutomations" :key="a.id" class="kb-style-card" @click="openEdit(a)">
           <div class="card-header">
@@ -98,6 +99,7 @@
           {{ t('automation.list.add') }}
         </t-button>
       </EmptyState>
+      </div>
 
       <AutomationDrawer ref="drawerRef" :agents="agentOptions" @saved="reload" />
       <RunsDrawer v-model:visible="runsVisible" :automation="runsTarget" />
@@ -297,9 +299,12 @@ onMounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 20px 28px;
+  padding: 20px 28px 0;
   box-sizing: border-box;
-  overflow-y: auto;
+}
+/* Header and toolbar stay fixed; only the list scrolls (KB/agent pages). */
+.automations-main {
+  .resource-list-main();
 }
 .header {
   .resource-list-header();
