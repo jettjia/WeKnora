@@ -3834,6 +3834,7 @@ export default {
     questionMinimapAttachmentPlaceholder: '(Вложение)',
     referenceChunkCount: '{count} фрагмент(ов)',
     fallbackHint: 'В базе знаний не найдено релевантного содержимого. Выше представлен прямой ответ модели.',
+    truncatedHint: 'Ответ обрезан на лимите вывода модели за один ответ. Выше — то, что было создано до обрыва.',
     requestInfoTitle: 'Request info',
     requestInfoRequestId: 'Request ID',
     requestInfoMessageId: 'Message ID',
@@ -3929,6 +3930,7 @@ export default {
     processError: 'Ошибка обработки',
     sessionExcerpt: 'Выдержка из сессии',
     noAnswerContent: '(Нет содержимого ответа)',
+    manualSourcesHeading: 'Источники',
     noMatchFound: 'Совпадений не найдено',
     deleteSessionFailed: 'Ошибка удаления, попробуйте позже!',
     imageTooMany: 'Максимум 5 изображений',
@@ -4925,7 +4927,6 @@ export default {
     }
   },
   manualEditor: {
-    description: 'Пишите знания в Markdown с предпросмотром в реальном времени',
     defaultTitlePrefix: 'Новый документ',
     noDocumentKnowledgeBases: 'Нет доступных баз знаний типа "документ". Пожалуйста, создайте одну сначала',
     actions: {
@@ -4940,12 +4941,13 @@ export default {
     status: {
       draftTag: 'Статус: Черновик',
       publishedTag: 'Статус: Опубликовано',
-      lastUpdated: 'Последнее обновление: {time}'
+      lastUpdated: 'Последнее обновление: {time}',
+      counter: 'Символов: {chars} · Строк: {lines}'
     },
     form: {
-      knowledgeBaseLabel: 'Целевая база знаний',
       knowledgeBasePlaceholder: 'Выберите базу знаний',
       titleLabel: 'Заголовок знания',
+      knowledgeBaseLabel: 'Целевая база знаний',
       titlePlaceholder: 'Введите заголовок',
       contentPlaceholder: 'Поддерживается Markdown. Используйте # заголовки, списки, блоки кода и т.д.'
     },
@@ -4967,7 +4969,6 @@ export default {
       currentKnowledgeBase: 'Текущая база знаний'
     },
     section: {
-      basic: 'Основная информация',
       content: 'Содержимое'
     },
     title: {
@@ -4977,9 +4978,17 @@ export default {
     preview: {
       empty: 'Пока нет содержимого'
     },
+    shortcuts: {
+      title: 'Горячие клавиши',
+      continueList: 'Продолжить список',
+      indent: 'Отступ / Shift+Tab — назад'
+    },
     view: {
-      editLabel: 'Вернуться к редактированию',
-      previewLabel: 'Предпросмотр'
+      edit: 'Редактор',
+      split: 'Разделить',
+      preview: 'Предпросмотр',
+      splitUnavailable: 'Расширьте панель или включите полный экран, чтобы разделить вид',
+      groupLabel: 'Вид редактора'
     },
     toolbar: {
       bold: 'Жирный',
@@ -4997,7 +5006,9 @@ export default {
       link: 'Вставить ссылку',
       image: 'Вставить изображение',
       table: 'Вставить таблицу',
-      horizontalRule: 'Горизонтальная линия'
+      horizontalRule: 'Горизонтальная линия',
+      headingGroup: 'Заголовок',
+      insertGroup: 'Вставить'
     },
     table: {
       column1: 'Колонка 1',
@@ -5043,6 +5054,8 @@ export default {
       discard: 'Отменить изменения',
       keepEditing: 'Продолжить редактирование',
     },
+    fullscreen: 'Полный экран',
+    exitFullscreen: 'Выйти из полного экрана',
     save: 'Сохранить',
     delete: 'Удалить',
     edit: 'Редактировать',
@@ -6317,10 +6330,16 @@ export default {
       preview: 'Предпросмотр',
       previewBack: 'Назад к списку',
       collecting: 'Сохранение сгенерированных файлов…',
+      delete: 'Удалить',
+      deleteTitle: 'Удалить этот файл?',
+      deleteConfirm: '«{name}» и сохранённое содержимое будут удалены безвозвратно. Отменить нельзя.',
+      deleted: 'Файл удалён',
+      deleteFailed: 'Не удалось удалить, повторите попытку.',
       download: 'Скачать',
       downloadFailed: 'Не удалось скачать, повторите попытку.',
       inlinePreviewHint: 'Нажмите для просмотра',
       inlineMissing: 'Файл недоступен',
+      inlineDeleted: 'Файл удалён',
     },
     updatePlan: 'Обновить план',
     webSearchFound: 'Найдено <strong>{count}</strong> результатов веб‑поиска',
@@ -6583,6 +6602,15 @@ export default {
     root: 'Обработка знаний',
     attempt: 'Попытка {n}',
     retry: 'Повторить парсинг',
+    notRun: 'Не выполнялся',
+    stageFailed: 'Этап «{stage}» завершился с ошибкой',
+    copyError: 'Скопировать детали ошибки',
+    stat: {
+      duration: 'Длительность',
+      attempt: 'Попытка',
+      tasks: 'Фоновые задачи',
+      tasksValue: 'выполняется {running} · с ошибкой {failed} · готово {completed}'
+    },
     refresh: 'Refresh now',
     copy: 'Copy',
     copyDetails: 'Скопировать детали',
@@ -6602,7 +6630,6 @@ export default {
     minutesAgo: '{n}m ago',
     noActivity: 'Нет активности парсинга',
     totalDuration: 'Всего: {d}',
-    total: 'Всего {d}',
     errorCode: {
       UNKNOWN_SUGGESTION: 'Проверьте логи приложения для подробностей.'
     },
@@ -6657,8 +6684,6 @@ export default {
     head: {
       stagesDone: 'Main stages',
       stagesProgress: 'Current stage',
-      postprocessTasks: 'Postprocess: {running} running / {failed} failed / {completed} completed',
-      completedWithActiveTrace: 'Processing completed, but {n} trace task(s) remain active',
       attempt: 'Attempt',
       updated: 'Updated'
     },
@@ -7389,6 +7414,12 @@ export default {
     total: 'Файлов: {count}',
     versions: 'Версий: {count}',
     preview: 'Предпросмотр',
+    delete: 'Удалить',
+    deleteTitle: 'Удалить этот файл?',
+    deleteConfirm: '«{name}» и сохранённое содержимое будут удалены безвозвратно. Отменить нельзя.',
+    deleteConfirmVersions: 'Все версии файла «{name}» ({count}) и их содержимое будут удалены безвозвратно. Отменить нельзя.',
+    deleted: 'Файл удалён',
+    deleteFailed: 'Не удалось удалить, повторите попытку.',
     download: 'Скачать',
     downloadFailed: 'Не удалось скачать файл. Повторите попытку позже',
     openSession: 'Открыть диалог',

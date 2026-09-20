@@ -140,6 +140,12 @@ export default {
     total: '{count} files',
     versions: '{count} versions',
     preview: 'Preview',
+    delete: 'Delete',
+    deleteTitle: 'Delete this file?',
+    deleteConfirm: '“{name}” and its stored contents will be permanently deleted. This cannot be undone.',
+    deleteConfirmVersions: 'All {count} versions of “{name}” and their stored contents will be permanently deleted. This cannot be undone.',
+    deleted: 'File deleted',
+    deleteFailed: 'Delete failed, please retry.',
     download: 'Download',
     downloadFailed: 'Download failed. Please try again later.',
     openSession: 'Open conversation',
@@ -893,6 +899,15 @@ export default {
     },
     attempt: 'Attempt {n}',
     retry: 'Retry parsing',
+    notRun: 'Not run',
+    stageFailed: '{stage} failed',
+    copyError: 'Copy error details',
+    stat: {
+      duration: 'Duration',
+      attempt: 'Attempt',
+      tasks: 'Background tasks',
+      tasksValue: '{running} running · {failed} failed · {completed} done'
+    },
     refresh: 'Refresh now',
     copy: 'Copy',
     copyDetails: 'Copy details',
@@ -912,12 +927,9 @@ export default {
     minutesAgo: '{n}m ago',
     noActivity: 'No parsing activity yet',
     totalDuration: 'Total: {d}',
-    total: 'Total {d}',
     head: {
       stagesDone: 'Main stages',
       stagesProgress: 'Current stage',
-      postprocessTasks: 'Postprocess: {running} running / {failed} failed / {completed} completed',
-      completedWithActiveTrace: 'Processing completed, but {n} trace task(s) remain active',
       attempt: 'Attempt',
       updated: 'Updated'
     },
@@ -985,10 +997,16 @@ export default {
       preview: 'Preview',
       previewBack: 'Back to list',
       collecting: 'Saving generated files…',
+      delete: 'Delete',
+      deleteTitle: 'Delete this file?',
+      deleteConfirm: '“{name}” and its stored contents will be permanently deleted. This cannot be undone.',
+      deleted: 'File deleted',
+      deleteFailed: 'Delete failed, please retry.',
       download: 'Download',
       downloadFailed: 'Download failed, please retry.',
       inlinePreviewHint: 'Click to preview',
       inlineMissing: 'File unavailable',
+      inlineDeleted: 'File deleted',
     },
     updatePlan: 'Update Plan',
     webSearchFound: 'Found <strong>{count}</strong> web search result(s)',
@@ -2466,6 +2484,8 @@ export default {
       discard: 'Discard changes',
       keepEditing: 'Keep editing',
     },
+    fullscreen: 'Full screen',
+    exitFullscreen: 'Exit full screen',
     save: 'Save',
     delete: 'Delete',
     edit: 'Edit',
@@ -2568,11 +2588,21 @@ export default {
       link: 'Insert link',
       image: 'Insert image',
       table: 'Insert table',
-      horizontalRule: 'Horizontal rule'
+      horizontalRule: 'Horizontal rule',
+      headingGroup: 'Heading',
+      insertGroup: 'Insert'
+    },
+    shortcuts: {
+      title: 'Shortcuts',
+      continueList: 'Continue the list',
+      indent: 'Indent / Shift+Tab to outdent'
     },
     view: {
-      editLabel: 'Back to edit',
-      previewLabel: 'Preview content'
+      edit: 'Edit',
+      split: 'Split',
+      preview: 'Preview',
+      splitUnavailable: 'Widen the drawer or go full screen to split the view',
+      groupLabel: 'Editor view'
     },
     preview: {
       empty: 'No content yet'
@@ -2581,9 +2611,7 @@ export default {
       edit: 'Edit Markdown Knowledge',
       create: 'Create Markdown Knowledge'
     },
-    description: 'Write knowledge in Markdown with live preview',
     section: {
-      basic: 'Basic Info',
       content: 'Content'
     },
     labels: {
@@ -2605,9 +2633,9 @@ export default {
       published: 'Knowledge published and indexing started'
     },
     form: {
-      knowledgeBaseLabel: 'Target knowledge base',
       knowledgeBasePlaceholder: 'Select knowledge base',
       titleLabel: 'Knowledge title',
+      knowledgeBaseLabel: 'Target knowledge base',
       titlePlaceholder: 'Enter title',
       contentPlaceholder: 'Supports Markdown. Use # headings, lists, code blocks, etc.'
     },
@@ -2615,7 +2643,8 @@ export default {
     status: {
       draftTag: 'Status: Draft',
       publishedTag: 'Status: Published',
-      lastUpdated: 'Last updated: {time}'
+      lastUpdated: 'Last updated: {time}',
+      counter: '{chars} characters · {lines} lines'
     },
     loading: {
       content: 'Loading content...',
@@ -3684,6 +3713,7 @@ export default {
     questionMinimapAttachmentPlaceholder: '(Attachment)',
     referenceChunkCount: '{count} chunk(s)',
     fallbackHint: 'No relevant content found in knowledge base. Above is a direct response from the model.',
+    truncatedHint: 'This answer was cut off at the per-response output limit. Above is what the model produced before the cut.',
     requestInfoTitle: 'Request info',
     requestInfoRequestId: 'Request ID',
     requestInfoMessageId: 'Message ID',
@@ -3779,6 +3809,7 @@ export default {
     processError: 'Processing error',
     sessionExcerpt: 'Session Excerpt',
     noAnswerContent: '(No answer content)',
+    manualSourcesHeading: 'Sources',
     noMatchFound: 'No matching content found',
     deleteSessionFailed: 'Delete failed, please try again later!',
     imageTooMany: 'Maximum 5 images allowed',

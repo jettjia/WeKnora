@@ -140,6 +140,12 @@ export default {
     total: '{count} 件のファイル',
     versions: '{count} バージョン',
     preview: 'プレビュー',
+    delete: '削除',
+    deleteTitle: 'このファイルを削除しますか？',
+    deleteConfirm: '「{name}」と保存されている内容を完全に削除します。元に戻せません。',
+    deleteConfirmVersions: '「{name}」の全 {count} バージョンと保存されている内容を完全に削除します。元に戻せません。',
+    deleted: 'ファイルを削除しました',
+    deleteFailed: '削除に失敗しました。再試行してください。',
     download: 'ダウンロード',
     downloadFailed: 'ダウンロードに失敗しました。しばらくしてから再試行してください',
     openSession: '会話を開く',
@@ -893,6 +899,15 @@ export default {
     },
     attempt: '{n}回目の試行',
     retry: '再解析',
+    notRun: '未実行',
+    stageFailed: '{stage}が失敗しました',
+    copyError: 'エラー情報をコピー',
+    stat: {
+      duration: '所要時間',
+      attempt: '試行',
+      tasks: 'バックグラウンドタスク',
+      tasksValue: '実行中 {running} · 失敗 {failed} · 完了 {completed}'
+    },
     refresh: '今すぐ更新',
     copy: 'コピー',
     copyDetails: '詳細をコピー',
@@ -912,12 +927,9 @@ export default {
     minutesAgo: '{n}分前',
     noActivity: '解析の記録はまだありません',
     totalDuration: '合計: {d}',
-    total: '合計{d}',
     head: {
       stagesDone: '主要ステージ',
       stagesProgress: '現在のステージ',
-      postprocessTasks: '後処理: 実行中{running}件／失敗{failed}件／完了{completed}件',
-      completedWithActiveTrace: '処理は完了しましたが、{n}件のトレースタスクがまだ実行中です',
       attempt: '試行',
       updated: '更新'
     },
@@ -985,10 +997,16 @@ export default {
       preview: 'プレビュー',
       previewBack: '一覧に戻る',
       collecting: '生成されたファイルを保存中…',
+      delete: '削除',
+      deleteTitle: 'このファイルを削除しますか？',
+      deleteConfirm: '「{name}」と保存されている内容を完全に削除します。元に戻せません。',
+      deleted: 'ファイルを削除しました',
+      deleteFailed: '削除に失敗しました。再試行してください。',
       download: 'ダウンロード',
       downloadFailed: 'ダウンロードに失敗しました。再試行してください。',
       inlinePreviewHint: 'クリックしてプレビュー',
       inlineMissing: 'ファイルを利用できません',
+      inlineDeleted: 'ファイルは削除されました',
     },
     updatePlan: 'プランを更新',
     webSearchFound: 'Web検索結果を<strong>{count}</strong>件見つけました',
@@ -2466,6 +2484,8 @@ export default {
       discard: '変更を破棄',
       keepEditing: '編集を続ける',
     },
+    fullscreen: '全画面',
+    exitFullscreen: '全画面を終了',
     save: '保存',
     delete: '削除',
     edit: '編集',
@@ -2568,11 +2588,21 @@ export default {
       link: 'リンクを挿入',
       image: '画像を挿入',
       table: '表を挿入',
-      horizontalRule: '水平線'
+      horizontalRule: '水平線',
+      headingGroup: '見出し',
+      insertGroup: '挿入'
+    },
+    shortcuts: {
+      title: 'ショートカット',
+      continueList: 'リストを続ける',
+      indent: 'インデント / Shift+Tab で解除'
     },
     view: {
-      editLabel: '編集に戻る',
-      previewLabel: '内容をプレビュー'
+      edit: '編集',
+      split: '分割',
+      preview: 'プレビュー',
+      splitUnavailable: '幅が足りません。ドロワーを広げるか全画面にすると分割できます',
+      groupLabel: 'エディタ表示'
     },
     preview: {
       empty: 'まだ内容がありません'
@@ -2581,9 +2611,7 @@ export default {
       edit: 'Markdownナレッジを編集',
       create: 'Markdownナレッジを作成'
     },
-    description: 'Markdownでナレッジを記述し、リアルタイムでプレビューできます',
     section: {
-      basic: '基本情報',
       content: '内容'
     },
     labels: {
@@ -2605,9 +2633,9 @@ export default {
       published: 'ナレッジを公開し、インデックス作成を開始しました'
     },
     form: {
-      knowledgeBaseLabel: '対象のナレッジベース',
       knowledgeBasePlaceholder: 'ナレッジベースを選択',
       titleLabel: 'ナレッジのタイトル',
+      knowledgeBaseLabel: '対象のナレッジベース',
       titlePlaceholder: 'タイトルを入力',
       contentPlaceholder: 'Markdownに対応しています。#見出し、リスト、コードブロックなどが使えます。'
     },
@@ -2615,7 +2643,8 @@ export default {
     status: {
       draftTag: 'ステータス: 下書き',
       publishedTag: 'ステータス: 公開済み',
-      lastUpdated: '最終更新: {time}'
+      lastUpdated: '最終更新: {time}',
+      counter: '{chars} 文字 · {lines} 行'
     },
     loading: {
       content: '内容を読み込み中...',
@@ -3684,6 +3713,7 @@ export default {
     questionMinimapAttachmentPlaceholder: '（添付ファイル）',
     referenceChunkCount: '{count}件のチャンク',
     fallbackHint: 'ナレッジベースから関連する内容が見つかりませんでした。上記はモデルの直接回答です。',
+    truncatedHint: 'モデルの1回あたりの出力上限で回答が途中で打ち切られました。上記は打ち切り前に生成された内容です。',
     requestInfoTitle: 'リクエスト情報',
     requestInfoRequestId: 'Request ID',
     requestInfoMessageId: 'メッセージID',
@@ -3779,6 +3809,7 @@ export default {
     processError: '処理エラー',
     sessionExcerpt: 'セッション抜粋',
     noAnswerContent: '（回答内容なし）',
+    manualSourcesHeading: '参照元',
     noMatchFound: '一致する内容が見つかりません',
     deleteSessionFailed: '削除に失敗しました。しばらくしてから再試行してください！',
     imageTooMany: '画像は最大5枚までです',

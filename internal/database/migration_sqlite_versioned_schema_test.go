@@ -51,6 +51,7 @@ var versionedSQLiteColumns = map[string][]string{
 	"embed_channels":     {"allow_memory"},                                                     // 000060
 	"mcp_oauth_tokens":   {"principal_type", "principal_id"},                                   // 000064
 	"mcp_tool_approvals": {"enabled"},                                                          // 000091
+	"message_artifacts":  {"deleted_at"},                                                       // 000107
 }
 
 // This branch carries the semantic modeling module's sqlite migrations at

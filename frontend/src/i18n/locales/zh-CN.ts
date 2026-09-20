@@ -3836,6 +3836,7 @@ export default {
     questionMinimapAttachmentPlaceholder: '（附件）',
     referenceChunkCount: '{count}个片段',
     fallbackHint: '未从知识库中检索到相关内容，以上为模型直接回答',
+    truncatedHint: '回答在模型单次输出上限处被截断，以上为截断前已生成的内容',
     requestInfoTitle: '请求信息',
     requestInfoRequestId: 'Request ID',
     requestInfoMessageId: '消息 ID',
@@ -3931,6 +3932,7 @@ export default {
     processError: '处理出错',
     sessionExcerpt: '会话摘录',
     noAnswerContent: '（无回答内容）',
+    manualSourcesHeading: '参考来源',
     noMatchFound: '未找到匹配的内容',
     deleteSessionFailed: '删除失败，请稍后再试！',
     imageTooMany: '最多上传5张图片',
@@ -4927,7 +4929,6 @@ export default {
     }
   },
   manualEditor: {
-    description: '使用 Markdown 编写知识内容，支持实时预览',
     defaultTitlePrefix: '新建文档',
     noDocumentKnowledgeBases: '暂无可用的文档型知识库，请先创建一个文档型知识库',
     actions: {
@@ -4942,12 +4943,13 @@ export default {
     status: {
       draftTag: '当前状态：草稿',
       publishedTag: '当前状态：已发布',
-      lastUpdated: '最近更新：{time}'
+      lastUpdated: '最近更新：{time}',
+      counter: '{chars} 字 · {lines} 行'
     },
     form: {
-      knowledgeBaseLabel: '目标知识库',
       knowledgeBasePlaceholder: '请选择知识库',
       titleLabel: '知识标题',
+      knowledgeBaseLabel: '目标知识库',
       titlePlaceholder: '请输入标题',
       contentPlaceholder: '支持 Markdown 语法，可使用 # 标题、列表、代码块等'
     },
@@ -4969,7 +4971,6 @@ export default {
       currentKnowledgeBase: '当前知识库'
     },
     section: {
-      basic: '基本信息',
       content: '知识内容'
     },
     title: {
@@ -4979,9 +4980,17 @@ export default {
     preview: {
       empty: '暂无内容'
     },
+    shortcuts: {
+      title: '快捷键',
+      continueList: '列表内自动续行',
+      indent: '缩进 / Shift+Tab 反缩进'
+    },
     view: {
-      editLabel: '返回编辑',
-      previewLabel: '预览内容'
+      edit: '编辑',
+      split: '分屏',
+      preview: '预览',
+      splitUnavailable: '宽度不足，拖宽抽屉或全屏后可用分屏',
+      groupLabel: '编辑区视图'
     },
     toolbar: {
       bold: '加粗',
@@ -4999,7 +5008,9 @@ export default {
       link: '插入链接',
       image: '插入图片',
       table: '插入表格',
-      horizontalRule: '分割线'
+      horizontalRule: '分割线',
+      headingGroup: '标题',
+      insertGroup: '插入'
     },
     table: {
       column1: '列1',
@@ -5045,6 +5056,8 @@ export default {
       discard: '放弃更改',
       keepEditing: '继续编辑',
     },
+    fullscreen: '全屏',
+    exitFullscreen: '退出全屏',
     save: '保存',
     delete: '删除',
     edit: '编辑',
@@ -6319,10 +6332,16 @@ export default {
       preview: '预览',
       previewBack: '返回列表',
       collecting: '正在保存生成的文件…',
+      delete: '删除',
+      deleteTitle: '删除这个文件？',
+      deleteConfirm: '将永久删除「{name}」，包括已保存的文件内容，且无法恢复。',
+      deleted: '文件已删除',
+      deleteFailed: '删除失败，请稍后重试',
       download: '下载',
       downloadFailed: '下载失败，请稍后重试',
       inlinePreviewHint: '点击预览',
       inlineMissing: '文件不可用',
+      inlineDeleted: '文件已删除',
     },
     updatePlan: '更新计划',
     webSearchFound: '找到 <strong>{count}</strong> 个网络搜索结果',
@@ -6585,6 +6604,15 @@ export default {
     root: '知识处理',
     attempt: '第 {n} 次尝试',
     retry: '重新解析',
+    notRun: '未执行',
+    stageFailed: '{stage}阶段失败',
+    copyError: '复制错误信息',
+    stat: {
+      duration: '耗时',
+      attempt: '尝试',
+      tasks: '后台任务',
+      tasksValue: '运行中 {running} · 失败 {failed} · 已完成 {completed}'
+    },
     refresh: '立即刷新',
     copy: '复制',
     copyDetails: '复制详情',
@@ -6604,7 +6632,6 @@ export default {
     minutesAgo: '{n} 分钟前',
     noActivity: '暂无解析记录',
     totalDuration: '总耗时：{d}',
-    total: '总耗时 {d}',
     errorCode: {
       UNKNOWN_SUGGESTION: '请查看应用日志获取详细信息。'
     },
@@ -6659,8 +6686,6 @@ export default {
     head: {
       stagesDone: '主流程阶段',
       stagesProgress: '当前阶段',
-      postprocessTasks: '后台任务：运行中 {running} / 失败 {failed} / 已完成 {completed}',
-      completedWithActiveTrace: '处理已完成，但仍有 {n} 个 Trace 任务处于活动状态',
       attempt: '尝试',
       updated: '更新于'
     },
@@ -7391,6 +7416,12 @@ export default {
     total: '共 {count} 个文件',
     versions: '{count} 个版本',
     preview: '预览',
+    delete: '删除',
+    deleteTitle: '删除这个文件？',
+    deleteConfirm: '将永久删除「{name}」，包括已保存的文件内容，且无法恢复。',
+    deleteConfirmVersions: '将永久删除「{name}」的全部 {count} 个版本，包括已保存的文件内容，且无法恢复。',
+    deleted: '文件已删除',
+    deleteFailed: '删除失败，请稍后重试',
     download: '下载',
     downloadFailed: '下载失败，请稍后重试',
     openSession: '打开所在会话',
