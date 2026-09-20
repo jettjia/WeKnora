@@ -27,14 +27,14 @@
           </t-tooltip>
           <t-popup trigger="click" placement="bottom-right" destroy-on-close>
             <t-button variant="outline" theme="default" size="small" class="type-switcher">
-              <t-icon :name="activeTypeMeta.icon" size="15px" />
+              <template #icon><t-icon :name="activeTypeMeta.icon" size="15px" /></template>
               <span class="type-switcher-label">{{ activeTypeMeta.label }}</span>
-              <t-icon name="chevron-down" size="14px" class="type-switcher-caret" />
+              <template #suffix><t-icon name="chevron-down" size="14px" /></template>
             </t-button>
             <template #content>
               <div class="type-menu">
                 <button v-for="opt in typeOptions" :key="opt.key" type="button" class="type-menu-item"
-                  :class="{ 'is-active': opt.key === activeType }" @click="activeType = opt.key">
+                  :class="{ 'is-active': opt.key === activeType }" @click="switchType(opt.key)">
                   <span class="type-menu-icon"><t-icon :name="opt.icon" size="17px" /></span>
                   <span class="type-menu-text">
                     <span class="type-menu-name">
@@ -59,7 +59,7 @@
       <ResourceListToolbar
         v-model="spaceSelection"
         v-model:query="keyword"
-        :hide-scopes="authStore.isLiteMode || activeType !== 'models'"
+        :hide-scopes="authStore.isLiteMode"
         :count-all="modelCount"
         :count-mine="mineCount"
         :count-favorites="favoriteCount"
@@ -177,6 +177,13 @@ const typeOptions = computed<{ key: SemanticTypeKey; icon: string; label: string
     count: groups.value.length, addLabel: t('semantic.group.add') },
 ])
 const activeTypeMeta = computed(() => typeOptions.value.find(o => o.key === activeType.value) ?? typeOptions.value[0])
+
+function switchType(key: SemanticTypeKey) {
+  activeType.value = key
+  // scope 视图 (收藏/最近/本空间) 只对模型有意义: 切到其他类型时回到「全部」,
+  // 避免「scope 高亮但列表未过滤」的错位
+  if (key !== 'models') spaceSelection.value = 'all'
+}
 
 const canAddActive = computed(() =>
   activeType.value === 'models' ? canEdit.value && spaceSelection.value === 'all' : isAdmin.value
@@ -298,9 +305,8 @@ onMounted(async () => {
   color: var(--td-text-color-secondary);
 }
 
-/* ---- 右上角类型切换 ---- */
+/* ---- 右上角类型切换 (间距走 t-button 的 icon/suffix 插槽规则, 这里只管外观) ---- */
 .type-switcher {
-  gap: 6px;
   border-radius: 6px;
 }
 
