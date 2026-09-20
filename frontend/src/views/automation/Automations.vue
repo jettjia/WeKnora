@@ -332,8 +332,9 @@ onMounted(() => {
     gap: 8px;
   }
 }
-/* 顶层调用: mixin 自带 .header 选择器, 嵌在 .header{} 里会展开成无效的 .header .header */
-.resource-list-header();
+/* 本页的 h2/header-subtitle 字形块必须排在 mixin 之前:
+   mixin 末尾调用才能让 .header h2 { margin-right: auto } 赢过上面的 margin:0,
+   新建按钮才能推到行尾 (与知识库把 mixin 放样式块末尾同理) */
 .header-title h2 {
   margin: 0;
   font-size: var(--app-text-4xl);
@@ -345,6 +346,7 @@ onMounted(() => {
   font-size: var(--app-text-md);
   color: var(--td-text-color-secondary);
 }
+.resource-list-header();
 .card-grid {
   .resource-card-grid();
 }
