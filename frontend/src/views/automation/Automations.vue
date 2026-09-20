@@ -1,20 +1,10 @@
 <template>
   <div class="automations-container">
-    <ListSpaceSidebar
-      v-if="!authStore.isLiteMode"
-      v-model="spaceSelection"
-      :count-all="automations.length"
-      :count-favorites="favoritesCount"
-      :count-recents="recentsCount"
-      :count-mine="mineCount"
-      show-favorites
-      show-recents
-    />
     <div class="automations-page">
       <div class="header">
         <div class="header-title">
           <div class="title-row">
-            <h2>{{ t('automation.list.title') }}</h2>
+            <h2><ResourceIcon type="automation" :size="24" /> {{ t('automation.list.title') }}</h2>
             <t-tooltip v-if="canManage" :content="t('automation.list.add')" placement="bottom">
               <t-button variant="text" theme="default" size="small" class="header-action-btn" @click="openCreate">
                 <template #icon><t-icon name="add" size="16px" /></template>
@@ -24,6 +14,16 @@
           <p class="header-subtitle">{{ t('automation.list.subtitle') }}</p>
         </div>
       </div>
+
+      <ResourceListToolbar
+        v-model="spaceSelection"
+        v-model:query="keyword"
+        :hide-scopes="authStore.isLiteMode"
+        :count-all="automations.length"
+        :count-mine="mineCount"
+        :count-favorites="favoritesCount"
+        :count-recents="recentsCount"
+      />
 
       <div v-if="filteredAutomations.length" class="card-grid">
         <div v-for="a in filteredAutomations" :key="a.id" class="kb-style-card" @click="openEdit(a)">
@@ -88,14 +88,15 @@
         </div>
       </div>
 
-      <div v-else class="empty-state">
-        <img class="empty-img" src="@/assets/img/upload.svg" alt="" />
-        <span class="empty-txt">{{ emptyText }}</span>
+      <EmptyState v-else-if="keyword.trim()" icon="search" :title="t('common.noResult')">
+        <t-button variant="outline" @click="keyword = ''">{{ t('common.clear') }}</t-button>
+      </EmptyState>
+      <EmptyState v-else :image="uploadImg" :title="emptyText">
         <t-button v-if="canManage && spaceSelection === 'all'" class="empty-state-btn" @click="openCreate">
           <template #icon><t-icon name="add" /></template>
           {{ t('automation.list.add') }}
         </t-button>
-      </div>
+      </EmptyState>
 
       <AutomationDrawer ref="drawerRef" :agents="agentOptions" @saved="reload" />
       <RunsDrawer v-model:visible="runsVisible" :automation="runsTarget" />
@@ -111,7 +112,10 @@ import { listAutomations, deleteAutomation, updateAutomation, runAutomationNow, 
 import { listAgents } from '@/api/agent'
 import AutomationDrawer from '@/automation/AutomationDrawer.vue'
 import RunsDrawer from '@/automation/RunsDrawer.vue'
-import ListSpaceSidebar from '@/components/ListSpaceSidebar.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import ResourceIcon from '@/components/icons/ResourceIcon.vue'
+import ResourceListToolbar from '@/components/ResourceListToolbar.vue'
+import uploadImg from '@/assets/img/upload.svg'
 import { useResourcePins } from '@/composables/useResourcePins'
 import { useAuthStore } from '@/stores/auth'
 
@@ -127,6 +131,7 @@ const runsTarget = ref<Automation | null>(null)
 // 收藏 (服务端) + 最近 (本地), 类型 automation — 与知识库/智能体同款机制
 const pins = useResourcePins()
 const spaceSelection = ref('all')
+const keyword = ref('')
 
 const canManage = computed(() => authStore.hasRole('contributor'))
 
@@ -143,8 +148,8 @@ async function toggleFavoriteAutomation(a: Automation) {
   }
 }
 
-// 侧栏视图过滤: 全部 / 收藏 / 最近 / 本空间(我创建的)
-const filteredAutomations = computed(() => {
+// 顶部工具栏视图过滤: 全部 / 收藏 / 最近 / 本空间(我创建的)
+const selectionFiltered = computed(() => {
   const sel = spaceSelection.value
   if (sel === 'favorites') {
     const ids = new Set(pins.favorites.value.filter(e => e.type === 'automation').map(e => e.id))
@@ -160,6 +165,13 @@ const filteredAutomations = computed(() => {
   }
   return automations.value
 })
+
+function applyKeyword(list: Automation[]) {
+  const kw = keyword.value.trim().toLowerCase()
+  if (!kw) return list
+  return list.filter(a => `${a.title || ''} ${a.name} ${a.description || ''}`.toLowerCase().includes(kw))
+}
+const filteredAutomations = computed(() => applyKeyword(selectionFiltered.value))
 
 const emptyText = computed(() => {
   if (spaceSelection.value === 'favorites') return t('automation.list.emptyFavorites')
@@ -272,7 +284,6 @@ onMounted(() => {
 <style scoped>
 .automations-container {
   height: 100%;
-  display: flex;
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
@@ -334,6 +345,7 @@ onMounted(() => {
   color: var(--td-text-color-secondary);
 }
 .card-grid {
+  margin-top: 16px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
@@ -538,13 +550,6 @@ onMounted(() => {
 }
 .menu-icon {
   font-size: var(--app-text-xl);
-}
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 64px 0;
 }
 .empty-state .empty-img {
   width: 120px;

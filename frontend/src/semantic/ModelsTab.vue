@@ -183,6 +183,7 @@ const props = defineProps<{
   connections: ConnectionInfo[]
   groups: DataGroup[]
   spaceSelection: string
+  search?: string
   canEdit: boolean
   canPublish: boolean
   currentUserId: string
@@ -269,7 +270,10 @@ const visibleModels = computed(() => {
       .filter(m => order.has(m.id))
       .sort((a, b) => (order.get(a.id) || 0) - (order.get(b.id) || 0))
   }
-  return models.value
+  const base = models.value
+  const kw = (props.search || '').trim().toLowerCase()
+  if (!kw) return base
+  return base.filter(m => `${m.title || ''} ${m.name} ${m.description || ''}`.toLowerCase().includes(kw))
 })
 
 const count = computed(() => models.value.length)

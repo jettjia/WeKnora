@@ -1,21 +1,11 @@
 <template>
   <div class="semantic-studio-container">
-    <ListSpaceSidebar
-      v-if="!authStore.isLiteMode"
-      v-model="spaceSelection"
-      :count-all="modelCount"
-      :count-favorites="favoriteCount"
-      :count-recents="recentCount"
-      :count-mine="mineCount"
-      show-favorites
-      show-recents
-    />
     <div class="semantic-studio">
       <!-- 页头: 对齐知识库列表页 -->
       <div class="header">
         <div class="header-title">
           <div class="title-row">
-            <h2>{{ t('semantic.menu') }}</h2>
+            <h2><ResourceIcon type="semantic" :size="24" /> {{ t('semantic.menu') }}</h2>
             <t-tag v-if="info?.cube_ready" theme="success" variant="light-outline" size="small">
               {{ t('semantic.info.cubeReady') }}
             </t-tag>
@@ -33,6 +23,16 @@
           {{ t('semantic.audit.title') }}
         </t-button>
       </div>
+
+      <ResourceListToolbar
+        v-model="spaceSelection"
+        v-model:query="keyword"
+        :hide-scopes="authStore.isLiteMode"
+        :count-all="modelCount"
+        :count-mine="mineCount"
+        :count-favorites="favoriteCount"
+        :count-recents="recentCount"
+      />
 
       <t-alert v-if="connectionsLoaded && !connections.length" theme="info" class="conn-hint">
         {{ t('semantic.info.noConnection') }}
@@ -58,6 +58,7 @@
             :connections="connections"
             :groups="groups"
             :space-selection="spaceSelection"
+          :search="keyword"
             :can-edit="canEdit"
             :can-publish="isAdmin"
             :current-user-id="authStore.currentUserId"
@@ -143,7 +144,8 @@ import {
   getModuleInfo, listConnections, listGroups, listAudits, listActions,
   type AuditLogEntry, type ConnectionInfo, type DataGroup, type ModuleInfo, type SemanticAction
 } from './api'
-import ListSpaceSidebar from '@/components/ListSpaceSidebar.vue'
+import ResourceIcon from '@/components/icons/ResourceIcon.vue'
+import ResourceListToolbar from '@/components/ResourceListToolbar.vue'
 import ModelsTab from './ModelsTab.vue'
 import ConnectionsTab from './ConnectionsTab.vue'
 import GroupsTab from './GroupsTab.vue'
@@ -166,6 +168,7 @@ const groups = ref<DataGroup[]>([])
 const actions = ref<SemanticAction[]>([])
 
 const spaceSelection = ref('all')
+const keyword = ref('')
 
 const modelsTabRef = ref<InstanceType<typeof ModelsTab> | null>(null)
 const connectionsTabRef = ref<InstanceType<typeof ConnectionsTab> | null>(null)
@@ -240,7 +243,6 @@ onMounted(async () => {
 <style scoped>
 .semantic-studio-container {
   height: 100%;
-  display: flex;
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
