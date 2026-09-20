@@ -1,8 +1,8 @@
 <template>
   <div class="connections-tab">
     <!-- 卡片网格: 对齐知识库/智能体列表的卡片语言 -->
-    <div v-if="modelValue.length" class="card-grid">
-      <div v-for="c in modelValue" :key="c.id" class="kb-style-card conn-card" @click="canManage && openEdit(c)">
+    <div v-if="visibleConnections.length" class="card-grid">
+      <div v-for="c in visibleConnections" :key="c.id" class="kb-style-card conn-card" @click="canManage && openEdit(c)">
         <div class="card-header">
           <span class="card-title" :title="c.name">
             <span class="card-title-text">{{ c.title || c.name }}</span>
@@ -60,11 +60,11 @@
       </div>
     </div>
 
-    <!-- 空状态: 对齐知识库列表 -->
+    <!-- 空状态: 对齐知识库列表 (搜索无结果时只给无结果文案, 不给空态引导和新建入口) -->
     <div v-else class="empty-state">
-      <img class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{ t('semantic.conn.empty') }}</span>
-      <t-button v-if="canManage" class="empty-state-btn" @click="openCreate">
+      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
+      <span class="empty-txt">{{ hasKeyword ? t('semantic.noResult') : t('semantic.conn.empty') }}</span>
+      <t-button v-if="!hasKeyword && canManage" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.conn.add') }}
       </t-button>
@@ -141,10 +141,21 @@ import {
 const props = defineProps<{
   modelValue: ConnectionInfo[]
   canManage: boolean
+  search?: string
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: ConnectionInfo[]): void; (e: 'changed'): void }>()
 
 const { t } = useI18n()
+
+// 页头搜索框过滤 (与模型列表同口径: 标题/标识/描述)
+const hasKeyword = computed(() => !!(props.search || '').trim())
+const visibleConnections = computed(() => {
+  const kw = (props.search || '').trim().toLowerCase()
+  if (!kw) return props.modelValue
+  return props.modelValue.filter(c =>
+    `${c.title || ''} ${c.name} ${c.description || ''}`.toLowerCase().includes(kw)
+  )
+})
 
 const slugPattern = /^[a-z][a-z0-9_]{0,62}$/
 

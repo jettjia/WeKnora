@@ -8,6 +8,14 @@ export const zhCN = {
     subtitle: '配置数据源连接, 维护语义模型, 按数据组控制谁可以查什么',
   },
   tabs: { models: '模型', connections: '数据源', groups: '数据组', actions: '操作' },
+  // 右上角类型切换: 每个资源类型的一句话定位
+  typeDesc: {
+    models: '语义模型与指标, 智能体查询业务数据的依据',
+    connections: '数据库连接, 模型数据的来源',
+    actions: 'Webhook 动作, 让智能体写回业务系统',
+    groups: '按组控制谁可以查哪些数据',
+  },
+  noResult: '没有匹配的结果',
   conn: {
     add: '添加数据源',
     edit: '编辑数据源',
@@ -220,6 +228,13 @@ export const enUS = {
     subtitle: 'Manage database connections, semantic models, and who can query what',
   },
   tabs: { models: 'Models', connections: 'Data Sources', groups: 'Data Groups', actions: 'Actions' },
+  typeDesc: {
+    models: 'Semantic models and metrics for agents to query',
+    connections: 'Database connections that feed the models',
+    actions: 'Webhook actions that write back to business systems',
+    groups: 'Control who can query what, per group',
+  },
+  noResult: 'No matching results',
   conn: {
     add: 'Add Data Source',
     edit: 'Edit Data Source',
@@ -434,6 +449,13 @@ export const ruRU = {
     subtitle: 'Настройка подключений, семантических моделей и прав доступа к данным',
   },
   tabs: { models: 'Модели', connections: 'Источники данных', groups: 'Группы данных', actions: 'Actions' },
+  typeDesc: {
+    models: 'Семантические модели и метрики для запросов агентов',
+    connections: 'Подключения к БД — источник данных для моделей',
+    actions: 'Webhook-действия для записи в бизнес-системы',
+    groups: 'Управление доступом к данным по группам',
+  },
+  noResult: 'Нет совпадений',
   conn: {
     add: 'Добавить источник данных',
     edit: 'Изменить источник данных',
@@ -646,6 +668,13 @@ export const jaJP = {
     subtitle: 'DB 接続・セマンティックモデル・データ参照権限を管理します',
   },
   tabs: { models: 'モデル', connections: 'データソース', groups: 'データグループ', actions: 'Actions' },
+  typeDesc: {
+    models: 'エージェントの照会先となるセマンティックモデルとメジャー',
+    connections: 'モデルのデータソースとなる DB 接続',
+    actions: '業務システムへ書き戻す Webhook アクション',
+    groups: 'グループごとにデータ参照権限を管理',
+  },
+  noResult: '一致する結果はありません',
   conn: {
     add: 'データソースを追加',
     edit: 'データソースを編集',
@@ -858,6 +887,13 @@ export const koKR = {
     subtitle: 'DB 연결, 시맨틱 모델, 데이터 조회 권한을 관리합니다',
   },
   tabs: { models: '모델', connections: '데이터 소스', groups: '데이터 그룹', actions: 'Actions' },
+  typeDesc: {
+    models: '에이전트가 조회할 시맨틱 모델과 메저',
+    connections: '모델 데이터의 원천이 되는 DB 연결',
+    actions: '비즈니스 시스템에 쓰기 작업을 하는 웹훅 액션',
+    groups: '그룹별 데이터 조회 권한 관리',
+  },
+  noResult: '일치하는 결과가 없습니다',
   conn: {
     add: '데이터 소스 추가',
     edit: '데이터 소스 편집',

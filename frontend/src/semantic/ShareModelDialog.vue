@@ -53,7 +53,7 @@ function fmtTime(ts: string): string {
   return ts ? String(ts).slice(0, 16).replace('T', ' ') : ''
 }
 
-async function open(m: Automation) {
+async function open(m: SemanticModel) {
   target.value = m
   selectedOrg.value = ''
   visible.value = true

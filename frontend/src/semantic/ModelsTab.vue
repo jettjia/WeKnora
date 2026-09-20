@@ -83,15 +83,16 @@
       </div>
     </div>
 
-    <!-- 空状态: 对齐知识库列表 -->
+    <!-- 空状态: 对齐知识库列表 (搜索无结果时只给无结果文案, 不给空态引导和新建入口) -->
     <div v-else class="empty-state">
-      <img class="empty-img" src="@/assets/img/upload.svg" alt="" />
+      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
       <span class="empty-txt">{{
-        spaceSelection === 'favorites' ? t('semantic.model.emptyFavorites')
+        hasKeyword ? t('semantic.noResult')
+        : spaceSelection === 'favorites' ? t('semantic.model.emptyFavorites')
         : spaceSelection === 'recents' ? t('semantic.model.emptyRecents')
         : t('semantic.model.empty')
       }}</span>
-      <t-button v-if="spaceSelection === 'all' && canEdit && connections.length" class="empty-state-btn" @click="openCreate">
+      <t-button v-if="!hasKeyword && spaceSelection === 'all' && canEdit && connections.length" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.model.add') }}
       </t-button>
@@ -263,26 +264,27 @@ function markRecent(m: SemanticModel) {
   localStorage.setItem(RECENT_KEY, JSON.stringify(recentIds.value))
 }
 
-// 侧栏视图过滤 (all | favorites | recents | mine)
+// 侧栏视图过滤 (all | favorites | recents | mine) + 页头搜索框 (全视图生效)
 const visibleModels = computed(() => {
+  let base: SemanticModel[]
   if (props.spaceSelection === 'favorites') {
-    return models.value.filter(m => favoriteIds.value.has(m.id))
-  }
-  if (props.spaceSelection === 'mine') {
+    base = models.value.filter(m => favoriteIds.value.has(m.id))
+  } else if (props.spaceSelection === 'mine') {
     const uid = authStore.currentUserId
-    return models.value.filter(m => m.created_by === uid)
-  }
-  if (props.spaceSelection === 'recents') {
+    base = models.value.filter(m => m.created_by === uid)
+  } else if (props.spaceSelection === 'recents') {
     const order = new Map(recentIds.value.map((id, i) => [id, i]))
-    return models.value
+    base = models.value
       .filter(m => order.has(m.id))
       .sort((a, b) => (order.get(a.id) || 0) - (order.get(b.id) || 0))
+  } else {
+    base = models.value
   }
-  const base = models.value
   const kw = (props.search || '').trim().toLowerCase()
   if (!kw) return base
   return base.filter(m => `${m.title || ''} ${m.name} ${m.description || ''}`.toLowerCase().includes(kw))
 })
+const hasKeyword = computed(() => !!(props.search || '').trim())
 
 const count = computed(() => models.value.length)
 const currentUserId = computed(() => props.currentUserId)

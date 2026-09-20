@@ -1,7 +1,7 @@
 <template>
   <div class="actions-tab">
-    <div v-if="modelValue.length" class="card-grid">
-      <div v-for="a in modelValue" :key="a.id" class="kb-style-card conn-card" @click="canManage && openEdit(a)">
+    <div v-if="visibleActions.length" class="card-grid">
+      <div v-for="a in visibleActions" :key="a.id" class="kb-style-card conn-card" @click="canManage && openEdit(a)">
         <div class="card-header">
           <span class="card-title" :title="a.name">
             <span class="card-title-text">{{ a.title || a.name }}</span>
@@ -57,9 +57,9 @@
     </div>
 
     <div v-else class="empty-state">
-      <img class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{ t('semantic.action.empty') }}</span>
-      <t-button v-if="canManage" class="empty-state-btn" @click="openCreate">
+      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
+      <span class="empty-txt">{{ hasKeyword ? t('semantic.noResult') : t('semantic.action.empty') }}</span>
+      <t-button v-if="!hasKeyword && canManage" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.action.add') }}
       </t-button>
@@ -223,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, h } from 'vue'
+import { computed, ref, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { MessagePlugin, DialogPlugin } from 'tdesign-vue-next'
 import { createAction, deleteAction, testAction, updateAction, type ActionInput, type ActionField, type Precondition, type SemanticAction, type DataGroup } from './api'
@@ -234,10 +234,22 @@ const props = defineProps<{
   canManage: boolean
   availableModels: string[]
   groups: DataGroup[]
+  search?: string
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: SemanticAction[]): void }>()
 
 const { t } = useI18n()
+
+// 页头搜索框过滤 (与模型列表同口径: 标题/标识/描述/关联模型)
+const hasKeyword = computed(() => !!(props.search || '').trim())
+const visibleActions = computed(() => {
+  const kw = (props.search || '').trim().toLowerCase()
+  if (!kw) return props.modelValue
+  return props.modelValue.filter(a =>
+    `${a.title || ''} ${a.name} ${a.description || ''} ${(a.object_types || []).join(' ')}`
+      .toLowerCase().includes(kw)
+  )
+})
 const slugPattern = /^[a-z][a-z0-9_]{0,62}$/
 
 const dialogVisible = ref(false)
@@ -286,7 +298,8 @@ const importPlaceholder = `{
 
 // 把导入的 JSON 对象映射到表单。宽松取值: 字段缺失保持表单现状, 类型不对的忽略。
 function applyActionJSON(obj: Record<string, unknown>): boolean {
-  if (String(obj.backend?.type ?? 'webhook') !== 'webhook') {
+  const b = (obj.backend ?? {}) as Record<string, unknown>
+  if (String(b.type ?? 'webhook') !== 'webhook') {
     importError.value = t('semantic.action.import.errors.unsupportedBackend')
     return false
   }
@@ -323,10 +336,10 @@ function applyActionJSON(obj: Record<string, unknown>): boolean {
       }))
   }
 
-  const b = (obj.backend ?? {}) as Record<string, unknown>
   if (typeof b.url === 'string') webhookUrl.value = b.url
-  if (typeof b.method === 'string' && methodOptions.some(m => m.value === b.method.toUpperCase())) {
-    webhookMethod.value = b.method.toUpperCase()
+  const method = typeof b.method === 'string' ? b.method : ''
+  if (method && methodOptions.some(m => m.value === method)) {
+    webhookMethod.value = method.toUpperCase()
   }
   if (typeof b.body_template === 'string') webhookBody.value = b.body_template
   if (b.success_status === undefined || b.success_status === null || (Array.isArray(b.success_status) && b.success_status.length === 0)) {

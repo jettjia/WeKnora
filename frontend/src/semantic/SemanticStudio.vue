@@ -1,7 +1,7 @@
 <template>
   <div class="semantic-studio-container">
     <div class="semantic-studio">
-      <!-- 页头: 对齐知识库列表页 -->
+      <!-- 页头: 对齐知识库列表页; 新建/类型切换/审计集中在右上角 (单模块聚焦) -->
       <div class="header">
         <div class="header-title">
           <div class="title-row">
@@ -17,17 +17,49 @@
           </div>
           <p class="header-subtitle">{{ t('semantic.info.subtitle') }}</p>
         </div>
-        <t-button v-if="isAdmin" variant="text" theme="default" size="small" class="audit-btn"
-          @click="openAudit">
-          <template #icon><t-icon name="history" size="15px" /></template>
-          {{ t('semantic.audit.title') }}
-        </t-button>
+        <div class="header-actions">
+          <t-tooltip v-if="canAddActive" :content="activeTypeMeta.addLabel" placement="bottom">
+            <t-button variant="text" theme="default" size="small" class="header-action-btn"
+              :disabled="addBlocked" @click="addActive">
+              <template #icon><t-icon name="add" size="16px" /></template>
+              {{ activeTypeMeta.addLabel }}
+            </t-button>
+          </t-tooltip>
+          <t-popup trigger="click" placement="bottom-right" destroy-on-close>
+            <t-button variant="outline" theme="default" size="small" class="type-switcher">
+              <t-icon :name="activeTypeMeta.icon" size="15px" />
+              <span class="type-switcher-label">{{ activeTypeMeta.label }}</span>
+              <t-icon name="chevron-down" size="14px" class="type-switcher-caret" />
+            </t-button>
+            <template #content>
+              <div class="type-menu">
+                <button v-for="opt in typeOptions" :key="opt.key" type="button" class="type-menu-item"
+                  :class="{ 'is-active': opt.key === activeType }" @click="activeType = opt.key">
+                  <span class="type-menu-icon"><t-icon :name="opt.icon" size="17px" /></span>
+                  <span class="type-menu-text">
+                    <span class="type-menu-name">
+                      {{ opt.label }}
+                      <span class="type-menu-count">{{ opt.count }}</span>
+                    </span>
+                    <span class="type-menu-desc">{{ opt.desc }}</span>
+                  </span>
+                  <t-icon v-if="opt.key === activeType" name="check" size="16px" class="type-menu-check" />
+                </button>
+              </div>
+            </template>
+          </t-popup>
+          <t-button v-if="isAdmin" variant="text" theme="default" size="small" class="audit-btn"
+            @click="openAudit">
+            <template #icon><t-icon name="history" size="15px" /></template>
+            {{ t('semantic.audit.title') }}
+          </t-button>
+        </div>
       </div>
 
       <ResourceListToolbar
         v-model="spaceSelection"
         v-model:query="keyword"
-        :hide-scopes="authStore.isLiteMode"
+        :hide-scopes="authStore.isLiteMode || activeType !== 'models'"
         :count-all="modelCount"
         :count-mine="mineCount"
         :count-favorites="favoriteCount"
@@ -39,92 +71,25 @@
         {{ t('semantic.info.noConnection') }}
       </t-alert>
 
-      <!-- 模型分组 (侧栏视图作用于这里) -->
-      <div class="section-block">
-        <div class="kb-section-header" @click="toggleSection('models')">
-          <t-icon name="layers" size="16px" />
-          <span class="kb-section-title">{{ t('semantic.tabs.models') }}</span>
-          <span class="kb-section-count">{{ modelCount }}</span>
-          <t-tooltip v-if="canEdit && spaceSelection === 'all'" :content="t('semantic.model.add')" placement="top">
-            <t-button variant="text" theme="default" size="small" class="section-add-btn"
-              :disabled="!connections.length" @click.stop="modelsTabRef?.openCreate()">
-              <template #icon><t-icon name="add" size="15px" /></template>
-            </t-button>
-          </t-tooltip>
-          <t-icon class="kb-section-toggle" :name="sections.models ? 'chevron-down' : 'chevron-right'" size="16px" />
-        </div>
-        <div v-show="sections.models" class="section-body">
-          <ModelsTab
-            ref="modelsTabRef"
-            :connections="connections"
-            :groups="groups"
-            :space-selection="spaceSelection"
-          :search="keyword"
-            :can-edit="canEdit"
-            :can-publish="isAdmin"
-            :current-user-id="authStore.currentUserId"
-            :cube-ready="!!info?.cube_ready"
-          />
-        </div>
-      </div>
-
-      <!-- 数据源分组 (仅「全部」视图; 收藏/最近/本空间只看模型) -->
-      <div v-if="spaceSelection === 'all'" class="section-block">
-        <div class="kb-section-header" @click="toggleSection('connections')">
-          <t-icon name="server" size="16px" />
-          <span class="kb-section-title">{{ t('semantic.tabs.connections') }}</span>
-          <span class="kb-section-count">{{ connections.length }}</span>
-          <t-tooltip v-if="isAdmin" :content="t('semantic.conn.add')" placement="top">
-            <t-button variant="text" theme="default" size="small" class="section-add-btn"
-              @click.stop="connectionsTabRef?.openCreate()">
-              <template #icon><t-icon name="add" size="15px" /></template>
-            </t-button>
-          </t-tooltip>
-          <t-icon class="kb-section-toggle" :name="sections.connections ? 'chevron-down' : 'chevron-right'" size="16px" />
-        </div>
-        <div v-show="sections.connections" class="section-body">
-          <ConnectionsTab ref="connectionsTabRef" v-model="connections" :can-manage="isAdmin" @changed="reloadGroups" />
-        </div>
-      </div>
-
-      <!-- 操作类型 (Action) -->
-      <div v-if="spaceSelection === 'all'" class="section-block">
-        <div class="kb-section-header" @click="toggleSection('actions')">
-          <t-icon name="play-circle" size="16px" />
-          <span class="kb-section-title">{{ t('semantic.tabs.actions') }}</span>
-          <span class="kb-section-count">{{ actions.length }}</span>
-          <t-tooltip v-if="isAdmin" :content="t('semantic.action.add')" placement="top">
-            <t-button variant="text" theme="default" size="small" class="section-add-btn"
-              @click.stop="actionsTabRef?.openCreate()">
-              <template #icon><t-icon name="add" size="15px" /></template>
-            </t-button>
-          </t-tooltip>
-          <t-icon class="kb-section-toggle" :name="sections.actions ? 'chevron-down' : 'chevron-right'" size="16px" />
-        </div>
-        <div v-show="sections.actions" class="section-body">
-          <ActionsTab ref="actionsTabRef" v-model="actions" :can-manage="isAdmin"
-            :available-models="modelNames" :groups="groups" />
-        </div>
-      </div>
-
-      <!-- 数据组分组 (仅「全部」视图) -->
-      <div v-if="spaceSelection === 'all'" class="section-block">
-        <div class="kb-section-header" @click="toggleSection('groups')">
-          <t-icon name="usergroup" size="16px" />
-          <span class="kb-section-title">{{ t('semantic.tabs.groups') }}</span>
-          <span class="kb-section-count">{{ groups.length }}</span>
-          <t-tooltip v-if="isAdmin" :content="t('semantic.group.add')" placement="top">
-            <t-button variant="text" theme="default" size="small" class="section-add-btn"
-              @click.stop="groupsTabRef?.openCreate()">
-              <template #icon><t-icon name="add" size="15px" /></template>
-            </t-button>
-          </t-tooltip>
-          <t-icon class="kb-section-toggle" :name="sections.groups ? 'chevron-down' : 'chevron-right'" size="16px" />
-        </div>
-        <div v-show="sections.groups" class="section-body">
-          <GroupsTab ref="groupsTabRef" v-model="groups" :can-manage="isAdmin" />
-        </div>
-      </div>
+      <!-- 单模块聚焦: 一次只呈现一个资源类型, 右上角切换; v-show 保留各列表状态 -->
+      <ModelsTab
+        v-show="activeType === 'models'"
+        ref="modelsTabRef"
+        :connections="connections"
+        :groups="groups"
+        :space-selection="spaceSelection"
+        :search="keyword"
+        :can-edit="canEdit"
+        :can-publish="isAdmin"
+        :current-user-id="authStore.currentUserId"
+        :cube-ready="!!info?.cube_ready"
+      />
+      <ConnectionsTab v-show="activeType === 'connections'" ref="connectionsTabRef" v-model="connections"
+        :can-manage="isAdmin" :search="keyword" @changed="reloadGroups" />
+      <ActionsTab v-show="activeType === 'actions'" ref="actionsTabRef" v-model="actions" :can-manage="isAdmin"
+        :available-models="modelNames" :groups="groups" :search="keyword" />
+      <GroupsTab v-show="activeType === 'groups'" ref="groupsTabRef" v-model="groups" :can-manage="isAdmin"
+        :search="keyword" />
       </div>
 
       <!-- 审计日志抽屉 -->
@@ -156,13 +121,6 @@ import ActionsTab from './ActionsTab.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
-
-// 分组折叠状态 (对齐知识库的分组折叠交互)
-const sections = ref({ models: true, connections: true, groups: false, actions: false })
-
-function toggleSection(key: 'models' | 'connections' | 'groups' | 'actions') {
-  sections.value[key] = !sections.value[key]
-}
 
 const info = ref<ModuleInfo | null>(null)
 const connections = ref<ConnectionInfo[]>([])
@@ -203,6 +161,38 @@ const mineCount = computed(() => modelsTabRef.value?.mineCount ?? 0)
 const recentCount = computed(() => Math.min(modelCount.value, 10))
 
 const modelNames = computed(() => modelsTabRef.value?.models?.map((m: { name: string }) => m.name) || [])
+
+// ---- 右上角类型切换: 单模块聚焦, 首页一次只呈现一个资源类型 ----
+type SemanticTypeKey = 'models' | 'connections' | 'actions' | 'groups'
+const activeType = ref<SemanticTypeKey>('models')
+
+const typeOptions = computed<{ key: SemanticTypeKey; icon: string; label: string; desc: string; count: number; addLabel: string }[]>(() => [
+  { key: 'models', icon: 'layers', label: t('semantic.tabs.models'), desc: t('semantic.typeDesc.models'),
+    count: modelCount.value, addLabel: t('semantic.model.add') },
+  { key: 'connections', icon: 'server', label: t('semantic.tabs.connections'), desc: t('semantic.typeDesc.connections'),
+    count: connections.value.length, addLabel: t('semantic.conn.add') },
+  { key: 'actions', icon: 'play-circle', label: t('semantic.tabs.actions'), desc: t('semantic.typeDesc.actions'),
+    count: actions.value.length, addLabel: t('semantic.action.add') },
+  { key: 'groups', icon: 'usergroup', label: t('semantic.tabs.groups'), desc: t('semantic.typeDesc.groups'),
+    count: groups.value.length, addLabel: t('semantic.group.add') },
+])
+const activeTypeMeta = computed(() => typeOptions.value.find(o => o.key === activeType.value) ?? typeOptions.value[0])
+
+const canAddActive = computed(() =>
+  activeType.value === 'models' ? canEdit.value && spaceSelection.value === 'all' : isAdmin.value
+)
+// 模型依赖数据源: 一个连接都没有时, 新建模型无从谈起
+const addBlocked = computed(() => activeType.value === 'models' && !connections.value.length)
+
+function addActive() {
+  const target = {
+    models: modelsTabRef,
+    connections: connectionsTabRef,
+    actions: actionsTabRef,
+    groups: groupsTabRef
+  }[activeType.value]
+  target?.value?.openCreate()
+}
 
 async function loadConnections() {
   try {
@@ -268,16 +258,150 @@ onMounted(async () => {
 .header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 4px;
 }
 
-.audit-btn {
+.header-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 新建按钮: 同知识库页头 header-action-btn 的口径 (resource-card.less .resource-list-header) */
+.header-action-btn {
+  width: auto;
+  min-height: 32px;
+  padding: 0 12px;
+  gap: 6px;
+  box-shadow: none;
+  color: var(--td-text-color-primary);
+  background: var(--td-bg-color-container);
+
+  &:hover:not(:disabled) {
+    background: var(--td-bg-color-container-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--td-brand-color);
+    outline-offset: 2px;
+  }
+}
+
+.audit-btn {
   border: 1px solid var(--td-component-stroke);
   border-radius: 6px;
   color: var(--td-text-color-secondary);
+}
+
+/* ---- 右上角类型切换 ---- */
+.type-switcher {
+  gap: 6px;
+  border-radius: 6px;
+}
+
+.type-switcher-label {
+  font-weight: 500;
+}
+
+.type-menu {
+  width: 280px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+}
+
+.type-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--td-bg-color-secondarycontainer);
+  }
+
+  &.is-active {
+    background: color-mix(in srgb, var(--td-brand-color) 8%, transparent);
+  }
+}
+
+.type-menu-icon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+}
+
+.type-menu-item.is-active .type-menu-icon {
+  color: var(--td-brand-color);
+  background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
+}
+
+.type-menu-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.type-menu-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--td-text-color-primary);
+}
+
+.type-menu-count {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.type-menu-item.is-active .type-menu-count {
+  background: color-mix(in srgb, var(--td-brand-color) 14%, transparent);
+  color: var(--td-brand-color);
+}
+
+.type-menu-desc {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--td-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.type-menu-check {
+  flex-shrink: 0;
+  color: var(--td-brand-color);
 }
 
 .audit-action {
@@ -319,70 +443,5 @@ onMounted(async () => {
 
 .conn-hint {
   margin: 12px 0 4px;
-}
-
-/* ---- 分组: 照抄知识库 kb-section-header ---- */
-.section-block {
-  margin-top: 16px;
-}
-
-.kb-section-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 4px 6px 0;
-  color: var(--td-text-color-secondary);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 20px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.kb-section-header:hover {
-  color: var(--td-text-color-primary);
-}
-
-.kb-section-title {
-  font-family: var(--app-font-family);
-}
-
-.kb-section-count {
-  margin-left: 2px;
-  padding: 0 6px;
-  border-radius: 8px;
-  background: var(--td-bg-color-secondarycontainer);
-  color: var(--td-text-color-secondary);
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 500;
-}
-
-.kb-section-toggle {
-  margin-left: 4px;
-  opacity: 0.7;
-}
-
-.kb-section-header:hover .kb-section-toggle {
-  opacity: 1;
-}
-
-.section-add-btn {
-  margin-left: auto;
-  padding: 0 !important;
-  min-width: 28px !important;
-  width: 28px !important;
-  height: 28px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  background: var(--td-bg-color-secondarycontainer) !important;
-  border: 1px solid var(--td-component-stroke) !important;
-  border-radius: 6px !important;
-  color: var(--td-text-color-secondary);
-}
-
-.section-body {
-  padding: 10px 0 4px;
 }
 </style>

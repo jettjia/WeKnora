@@ -1,8 +1,8 @@
 <template>
   <div class="groups-tab">
     <!-- 卡片网格: 对齐知识库/智能体列表的卡片语言 -->
-    <div v-if="modelValue.length" class="card-grid">
-      <div v-for="g in modelValue" :key="g.id" class="kb-style-card group-card" @click="canManage && openEdit(g)">
+    <div v-if="visibleGroups.length" class="card-grid">
+      <div v-for="g in visibleGroups" :key="g.id" class="kb-style-card group-card" @click="canManage && openEdit(g)">
         <div class="card-header">
           <span class="card-title" :title="g.name">
             <span class="card-title-text">{{ g.title || g.name }}</span>
@@ -51,11 +51,11 @@
       </div>
     </div>
 
-    <!-- 空状态: 对齐知识库列表 -->
+    <!-- 空状态: 对齐知识库列表 (搜索无结果时只给无结果文案, 不给空态引导和新建入口) -->
     <div v-else class="empty-state">
-      <img class="empty-img" src="@/assets/img/upload.svg" alt="" />
-      <span class="empty-txt">{{ t('semantic.group.empty') }}</span>
-      <t-button v-if="canManage" class="empty-state-btn" @click="openCreate">
+      <img v-if="!hasKeyword" class="empty-img" src="@/assets/img/upload.svg" alt="" />
+      <span class="empty-txt">{{ hasKeyword ? t('semantic.noResult') : t('semantic.group.empty') }}</span>
+      <t-button v-if="!hasKeyword && canManage" class="empty-state-btn" @click="openCreate">
         <template #icon><t-icon name="add" /></template>
         {{ t('semantic.group.add') }}
       </t-button>
@@ -122,11 +122,22 @@ import { useRouter } from 'vue-router'
 const props = defineProps<{
   modelValue: DataGroup[]
   canManage: boolean
+  search?: string
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: DataGroup[]): void }>()
 
 const { t } = useI18n()
 const router = useRouter()
+
+// 页头搜索框过滤 (与模型列表同口径: 标题/标识/描述)
+const hasKeyword = computed(() => !!(props.search || '').trim())
+const visibleGroups = computed(() => {
+  const kw = (props.search || '').trim().toLowerCase()
+  if (!kw) return props.modelValue
+  return props.modelValue.filter(g =>
+    `${g.title || ''} ${g.name} ${g.description || ''}`.toLowerCase().includes(kw)
+  )
+})
 const slugPattern = /^[a-z][a-z0-9_]{0,62}$/
 
 const dialogVisible = ref(false)
