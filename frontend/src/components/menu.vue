@@ -415,6 +415,8 @@ const isMenuItemActive = (itemPath: string): boolean => {
                 currentRoute === 'knowledgeBaseSettings';
         case 'agents':
             return currentRoute === 'agentList';
+        case 'automations':
+            return currentRoute === 'automationList';
         case 'artifacts':
             return currentRoute === 'artifactLibrary';
         case 'organizations':

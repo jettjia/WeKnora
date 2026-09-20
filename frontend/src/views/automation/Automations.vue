@@ -8,6 +8,7 @@
             <t-tooltip v-if="canManage" :content="t('automation.list.add')" placement="bottom">
               <t-button variant="text" theme="default" size="small" class="header-action-btn" @click="openCreate">
                 <template #icon><t-icon name="add" size="16px" /></template>
+                {{ t('automation.list.add') }}
               </t-button>
             </t-tooltip>
           </div>
@@ -281,9 +282,11 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="less">
+@import (reference) '@/components/css/resource-card.less';
 .automations-container {
   height: 100%;
+  display: flex;
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
@@ -299,39 +302,7 @@ onMounted(() => {
   overflow-y: auto;
 }
 .header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-}
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-/* Same square icon button as the knowledge-base/agent/org list headers. */
-.t-button.header-action-btn {
-  padding: 0;
-  min-width: 28px;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-stroke);
-  border-radius: var(--app-radius-sm);
-  color: var(--td-text-color-secondary);
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--td-bg-color-container) 72%, transparent);
-  transition: background var(--app-motion-base), border-color var(--app-motion-base), color var(--app-motion-base);
-}
-.t-button.header-action-btn:hover {
-  background: var(--td-bg-color-secondarycontainer);
-  border-color: var(--td-component-stroke);
-  color: var(--td-text-color-primary);
-}
-.header-action-btn :deep(.t-icon) {
-  color: var(--td-brand-color);
+  .resource-list-header();
 }
 .header-title h2 {
   margin: 0;

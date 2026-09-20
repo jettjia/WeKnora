@@ -243,6 +243,7 @@ onMounted(async () => {
 <style scoped>
 .semantic-studio-container {
   height: 100%;
+  display: flex;
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
