@@ -97,7 +97,7 @@
 
     <!-- Logo - Top Left -->
     <a href="https://github.com/Tencent/WeKnora" target="_blank" class="header-logo" :title="$t('common.github')">
-      <img src="@/assets/img/weknora.png" alt="WeKnora" class="logo-image" />
+      <img src="@/assets/img/century-lt.png" alt="CENTURY LT" class="logo-image" />
     </a>
 
     <!-- Header Links - Top Right -->
@@ -1205,7 +1205,7 @@ onMounted(async () => {
   cursor: pointer;
 
   .logo-image {
-    width: 120px;
+    width: 170px;
     height: auto;
   }
 }
@@ -1657,7 +1657,7 @@ onMounted(async () => {
     left: 40px;
 
     .logo-image {
-      width: 100px;
+      width: 140px;
     }
   }
 
