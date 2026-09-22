@@ -569,7 +569,7 @@ func (s *agentService) initializeSkillsManager(
 	toolRegistry *tools.ToolRegistry,
 ) (*skills.Manager, error) {
 	tenantID, _ := types.TenantIDFromContext(ctx)
-	sandboxMgr, configID, err := resolveSandboxForExecution(
+	sandboxMgr, pin, err := resolveSandboxForExecution(
 		ctx, s.sandboxResolver, s.sandboxMgr, s.sandboxPinner,
 		tenantID, sessionID, config.SandboxConfigID, s.sandboxPolicy,
 	)
@@ -580,7 +580,8 @@ func (s *agentService) initializeSkillsManager(
 		sandboxMgr = sandbox.NewDisabledManager()
 	}
 
-	logger.Infof(ctx, "Workspace sandbox in use: config=%s type=%s", configID, sandboxMgr.GetType())
+	logger.Infof(ctx, "Workspace sandbox in use: config=%s workspace=%d type=%s",
+		pin.ConfigID, pin.TenantOr(tenantID), sandboxMgr.GetType())
 
 	// Create skills manager
 	skillsConfig := &skills.ManagerConfig{

@@ -39,27 +39,30 @@ var versionedSQLiteTables = []string{
 // versionedSQLiteColumns maps each existing table to the columns that the
 // versioned migrations add and the SQLite baseline was missing.
 var versionedSQLiteColumns = map[string][]string{
-	"memory_subjects":    {"extraction_state"},                                                 // 000094
-	"memory_items":       {"replaces_id"},                                                      // 000094
-	"tenants":            {"api_principal_config"},                                             // 000064
-	"users":              {"is_system_admin"},                                                  // 000053
-	"knowledges":         {"pending_subtasks_count", "profile"},                                // 000056, 000101
-	"knowledge_bases":    {"profile_config", "generated_profile"},                              // 000101
-	"messages":           {"attachments", "usage", "sandbox_checkpoint", "context_checkpoint"}, // 000034/085/097/105
-	"sessions":           {"parent_session_id", "forked_from_message_id", "fork_bootstrap"},    // 000097
-	"tenant_invitations": {"token", "accepted_count"},                                          // 000054
-	"embed_channels":     {"allow_memory"},                                                     // 000060
-	"mcp_oauth_tokens":   {"principal_type", "principal_id"},                                   // 000064
-	"mcp_tool_approvals": {"enabled"},                                                          // 000091
-	"message_artifacts":  {"deleted_at"},                                                       // 000107
+	"memory_subjects": {"extraction_state"},                                                 // 000094
+	"memory_items":    {"replaces_id"},                                                      // 000094
+	"tenants":         {"api_principal_config"},                                             // 000064
+	"users":           {"is_system_admin"},                                                  // 000053
+	"knowledges":      {"pending_subtasks_count", "profile"},                                // 000056, 000101
+	"knowledge_bases": {"profile_config", "generated_profile"},                              // 000101
+	"messages":        {"attachments", "usage", "sandbox_checkpoint", "context_checkpoint"}, // 000034/085/097/105
+	"sessions": {
+		"parent_session_id", "forked_from_message_id", "fork_bootstrap", // 000097
+		"sandbox_config_tenant_id", // 000108
+	},
+	"tenant_invitations": {"token", "accepted_count"},        // 000054
+	"embed_channels":     {"allow_memory"},                   // 000060
+	"mcp_oauth_tokens":   {"principal_type", "principal_id"}, // 000064
+	"mcp_tool_approvals": {"enabled"},                        // 000091
+	"message_artifacts":  {"deleted_at"},                     // 000107
 }
 
 // The fork modules (semantic modeling / automation) migrate from
 // migrations/fork-sqlite against their own fork_schema_migrations table, so
-// the main watermark stays at upstream's latest sqlite migration (000026)
+// the main watermark stays at upstream's latest sqlite migration (000027)
 // while the fork watermark ends at the fork set's latest (000004).
 const (
-	expectedSQLiteMigrationVersion     = 26
+	expectedSQLiteMigrationVersion     = 27
 	expectedForkSQLiteMigrationVersion = 4
 )
 
