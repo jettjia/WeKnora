@@ -37,6 +37,7 @@ export const useMenuStore = defineStore('menuStore', () => {
     // 数据建模模块 (CUBE_ENABLE 关闭时后端 /semantic/info 不可达, 页面内为空态; 菜单常驻低噪音)
     { title: '', titleKey: 'menu.semantic', icon: 'semantic', path: 'semantic' },
     { title: '', titleKey: 'menu.automations', icon: 'automation', path: 'automations' },
+    { title: '', titleKey: 'toolbox.title', icon: 'toolbox', path: 'toolbox' },
     { title: '', titleKey: 'menu.organizations', icon: 'organization', path: 'organizations', requiredCapability: 'organizations' },
     { title: '', titleKey: 'menu.settings', icon: 'setting', path: 'settings' },
     { title: '', titleKey: 'menu.logout', icon: 'logout', path: 'logout' }

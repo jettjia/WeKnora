@@ -90,7 +90,7 @@ onMounted(() => { if (!props.hideScopes) orgStore.fetchOrganizations() })
   min-width: 0;
 }
 .category-tabs { .artifact-filter-tabs(); }
-.scope-count { margin-left: 5px; font-size: var(--app-text-xs); opacity: 0.65; font-variant-numeric: tabular-nums; }
+.scope-count { margin-left: 5px; font-size: var(--app-text-xs); font-variant-numeric: tabular-nums; }
 .category-tabs button:disabled { opacity: 0.45; cursor: not-allowed; }
 .space-filter { width: 180px; }
 .space-filter-icon-active { color: var(--td-brand-color); }

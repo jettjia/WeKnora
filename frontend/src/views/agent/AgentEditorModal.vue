@@ -1930,6 +1930,7 @@ import { SKILL_ICON } from '@/types/mention';
 import { listEmbedChannels } from '@/api/embed';
 import { getRootZoom, rectToCssPx } from '@/utils/zoom';
 import { integrationSectionKey } from '@/config/settingsRoute';
+import { toolboxLocation } from '@/config/toolbox';
 import {
   evaluateToolRequirement,
   deriveKbFilterFromTools,
@@ -2310,7 +2311,9 @@ function autoBindSoleSandbox() {
 
 function openSkillSettings() {
   const configId = formData.value.config.sandbox_config_id || ''
-  uiStore.openSettings('skills', configId || undefined)
+  modalShell.requestClose(() => {
+    void router.push(toolboxLocation('skills', configId || undefined))
+  })
 }
 
 const showSkillProgress = ref(false)

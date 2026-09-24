@@ -14,6 +14,7 @@ import (
 	"go.uber.org/dig"
 	"gorm.io/gorm"
 
+	"github.com/Tencent/WeKnora/internal/application/service"
 	"github.com/Tencent/WeKnora/internal/automation"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/handler"
@@ -99,12 +100,15 @@ type RouterParams struct {
 	// DB backs the self-contained semantic (数据建模) module; dig injects it
 	// from the container like every other dependency.
 	DB *gorm.DB
+	HostSandbox                  service.HostSandboxManager
 }
 
 // NewRouter 创建新的路由
 func NewRouter(params RouterParams) *gin.Engine {
 	r := gin.New()
 	r.ContextWithFallback = true
+	// 清理 FormFile/MultipartForm 解析产生的 multipart 临时文件，避免容器 /tmp 持续增长。
+	r.Use(middleware.MultipartFormCleanup())
 
 	// Trusted proxies: gin defaults to trusting ALL proxies, which makes
 	// c.ClientIP() honor a client-supplied X-Forwarded-For. Public, unauthed
