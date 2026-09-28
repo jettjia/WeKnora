@@ -1315,11 +1315,11 @@
       <div v-show="currentSection === 'skills' && isAgentMode" class="section">
         <div class="section-header">
           <h2>{{ $t('agent.editor.skillsConfig') }}</h2>
-          <p class="section-description">{{ $t('agent.editor.skillsConfigDesc') }}</p>
+          <p class="section-description">{{ hostOnly ? $t('agent.editor.hostSkillsConfigDesc') : $t('agent.editor.skillsConfigDesc') }}</p>
         </div>
 
         <div class="settings-group">
-          <div class="setting-row">
+          <div v-if="!hostOnly" class="setting-row">
             <div class="setting-info">
               <label>{{ $t('agent.editor.sandboxBackend') }}</label>
               <p class="desc">{{ $t('agent.editor.sandboxBackendHint') }}</p>
@@ -1474,7 +1474,7 @@
                       variant="text"
                       theme="primary"
                       :loading="installingCatalogId === skill.id"
-                      :title="installsAnUpgrade(skill) ? $t('agent.editor.upgradeOnThisSandbox') : $t('agent.editor.installToThisSandbox')"
+                      :title="installsAnUpgrade(skill) ? (hostOnly ? $t('agent.editor.hostUpgradeOnThisComputer') : $t('agent.editor.upgradeOnThisSandbox')) : (hostOnly ? $t('agent.editor.hostInstallToThisComputer') : $t('agent.editor.installToThisSandbox'))"
                       @click.stop="installCatalogToCurrent(skill)"
                     >
                       {{ installsAnUpgrade(skill) ? $t('settings.skills.upgrade') : $t('agent.editor.installShort') }}
@@ -1485,7 +1485,7 @@
                       variant="text"
                       theme="primary"
                       :loading="installingCatalogId === skill.id"
-                      :title="$t('agent.editor.upgradeOnThisSandbox')"
+                      :title="hostOnly ? $t('agent.editor.hostUpgradeOnThisComputer') : $t('agent.editor.upgradeOnThisSandbox')"
                       @click.stop="installCatalogToCurrent(skill)"
                     >
                       {{ $t('settings.skills.upgrade') }}
@@ -1687,8 +1687,9 @@
         </div>
       </div>
 
-      <!-- 检索策略（仅在有知识库能力时显示） -->
-      <div v-show="currentSection === 'retrieval' && hasKnowledgeBase" class="section">
+      <!-- 检索策略（仅普通模式且有知识库能力时显示；Agent 模式的 search_knowledge
+           使用全局检索配置，这里的设置对它不生效） -->
+      <div v-show="currentSection === 'retrieval' && hasKnowledgeBase && !isAgentMode" class="section">
         <div class="section-header">
           <h2>{{ $t('agent.editor.retrievalStrategy') }}</h2>
           <p class="section-description">{{ $t('agentEditor.desc.retrievalSection') }}</p>
@@ -1918,6 +1919,8 @@ import { getModuleInfo, listModels } from '@/semantic/api';
 import { useAuthStore } from '@/stores/auth';
 import { useOrganizationStore } from '@/stores/organization';
 import { useChatResourcesStore } from '@/stores/chatResources';
+import { useDeploymentCapabilitiesStore } from '@/stores/deploymentCapabilities';
+import { HOST_SKILL_TARGET_ID, hostSkillTargetRecord, hostSkillsOnly } from '@/utils/skillTarget';
 import { useEditorResourcesStore } from '@/stores/editorResources';
 import AgentAvatar from '@/components/AgentAvatar.vue';
 import PromptTemplateSelector from '@/components/PromptTemplateSelector.vue';
@@ -1958,6 +1961,7 @@ const CHAT_PARSER_EXTENSIONS = [
 
 const uiStore = useUIStore();
 const authStore = useAuthStore();
+const deploymentCapabilities = useDeploymentCapabilitiesStore();
 const router = useRouter();
 const orgStore = useOrganizationStore();
 const chatResources = useChatResourcesStore();
@@ -2178,9 +2182,17 @@ const skillCatalog = ref<SkillCatalogItem[]>([]);
 const catalogReady = ref(false);
 const installingCatalogId = ref('');
 const skillsSelectionMode = ref<'all' | 'selected' | 'none'>('none');
-const hasSandboxSelected = computed(() => !!formData.value.config.sandbox_config_id);
+const hostOnly = computed(() => hostSkillsOnly(
+  deploymentCapabilities.isSupported('settings.sandbox.remote'),
+  deploymentCapabilities.isSupported('settings.sandbox.host'),
+));
+// Where this agent's skills install and run.
+const skillTargetId = computed(() =>
+  hostOnly.value ? HOST_SKILL_TARGET_ID : (formData.value.config.sandbox_config_id || ''),
+);
+const hasSandboxSelected = computed(() => !!skillTargetId.value);
 const canEnableSkills = computed(() =>
-  hasSandboxSelected.value || namedSandboxConfigs().length === 1,
+  hostOnly.value || hasSandboxSelected.value || namedSandboxConfigs().length === 1,
 );
 const canInstallSkills = computed(() => authStore.hasRole('admin'));
 
@@ -2198,7 +2210,7 @@ type CatalogSkillRow = SkillCatalogItem & {
 }
 
 const catalogSkillRows = computed<CatalogSkillRow[]>(() => {
-  const sandboxId = formData.value.config.sandbox_config_id || ''
+  const sandboxId = skillTargetId.value
   return skillCatalog.value.map((item) => {
     const inst = sandboxId
       ? (item.installations || []).find((row) => row.sandbox_config_id === sandboxId)
@@ -2223,6 +2235,11 @@ const showCatalogSkillList = computed(() =>
 )
 
 const skillsSelectionHint = computed(() => {
+  if (hostOnly.value) {
+    if (skillsSelectionMode.value === 'all') return t('agent.editor.hostSkillsAllListHint')
+    if (skillsSelectionMode.value === 'selected') return t('agent.editor.hostSelectSkillsDesc')
+    return t('agent.editor.hostSkillsSelectionDesc')
+  }
   if (skillsSelectionMode.value === 'all') return t('agent.editor.skillsAllListHint')
   if (skillsSelectionMode.value === 'selected') return t('agent.editor.selectSkillsDesc')
   return t('agent.editor.skillsSelectionDesc')
@@ -2255,7 +2272,7 @@ function skillStatusHint(skill: CatalogSkillRow): string {
   if (skill.installStatus === 'failed') return t('settings.sandbox.skillStatusFailed')
   if (skill.installStatus === 'removing') return t('settings.sandbox.skillStatusRemoving')
   if (skill.installStatus === 'ready' && !skill.installEnabled) {
-    return t('agent.editor.skillDisabledOnSandbox')
+    return hostOnly.value ? t('agent.editor.hostSkillDisabled') : t('agent.editor.skillDisabledOnSandbox')
   }
   return t('agent.editor.skillNotReady')
 }
@@ -2301,6 +2318,7 @@ function namedSandboxConfigs(): SandboxConfigRecord[] {
 }
 
 function autoBindSoleSandbox() {
+  if (hostOnly.value) return
   if (skillsSelectionMode.value === 'none') return
   if (formData.value.config.sandbox_config_id) return
   const configs = namedSandboxConfigs()
@@ -2310,7 +2328,7 @@ function autoBindSoleSandbox() {
 }
 
 function openSkillSettings() {
-  const configId = formData.value.config.sandbox_config_id || ''
+  const configId = skillTargetId.value
   modalShell.requestClose(() => {
     void router.push(toolboxLocation('skills', configId || undefined))
   })
@@ -2327,6 +2345,7 @@ const skillProgressDesc = computed(() => {
 })
 
 function sandboxRecordById(configId: string): SandboxConfigRecord | undefined {
+  if (hostOnly.value && configId === HOST_SKILL_TARGET_ID) return hostSkillTargetRecord(t('settings.skills.hostTarget'))
   return chatResources.sandboxConfigs.find((cfg) => cfg.id === configId)
 }
 
@@ -2335,7 +2354,7 @@ function installOnCurrentSandbox(skill: CatalogSkillRow, configId: string) {
 }
 
 async function openSkillInstallProgress(skill: CatalogSkillRow) {
-  const configId = formData.value.config.sandbox_config_id || ''
+  const configId = skillTargetId.value
   const record = sandboxRecordById(configId)
   if (!record) {
     openSkillSettings()
@@ -2381,7 +2400,7 @@ function pruneSelectedSkills() {
 
 async function syncInstalledSkills(force = false) {
   autoBindSoleSandbox()
-  const configId = formData.value.config.sandbox_config_id || ''
+  const configId = skillTargetId.value
   // The editor only edits this workspace's agents, so the sandbox config is
   // local and needs no source-workspace scope.
   await editorResources.ensureSkills(configId, undefined, force)
@@ -2396,7 +2415,7 @@ async function syncInstalledSkills(force = false) {
 }
 
 async function installCatalogToCurrent(skill: CatalogSkillRow) {
-  const configId = formData.value.config.sandbox_config_id || ''
+  const configId = skillTargetId.value
   if (!configId || installingCatalogId.value) return
   installingCatalogId.value = skill.id
   const upgrading = installsAnUpgrade(skill)
@@ -2808,7 +2827,9 @@ const navItems = computed(() => {
   items.push({ key: 'conversation', icon: 'chat', label: t('agent.editor.conversationSettings') });
   // 知识库与检索
   items.push({ key: 'knowledge', icon: 'folder', label: t('agent.editor.knowledgeConfig') });
-  if (hasKnowledgeBase.value) {
+  // 检索策略只作用于普通模式的问答流程；Agent 模式的检索工具不读这些设置，
+  // 显示出来只会让用户调了参数却没有任何效果。
+  if (hasKnowledgeBase.value && !isAgentMode.value) {
     items.push({ key: 'retrieval', icon: 'search', label: t('agent.editor.retrievalStrategy') });
   }
   items.push({ key: 'websearch', icon: 'internet', label: t('agent.editor.webSearchConfig') });
@@ -3576,6 +3597,7 @@ let editorInitializationGeneration = 0;
 watch(() => props.visible, async (val) => {
   const generation = ++editorInitializationGeneration;
   if (val) {
+    void deploymentCapabilities.ensureLoaded();
     editorInitializing.value = true;
     try {
     savedAgent.value = null;
@@ -3989,8 +4011,8 @@ watch(hasKnowledgeBase, (hasKB, oldHasKB) => {
 
 // 监听运行模式变化，自动切换页面
 watch(isAgentMode, (isAgent) => {
-  // 如果当前在高级设置页面但切换到了Agent模式，切换到基础设置
-  if (isAgent && currentSection.value === 'advanced') {
+  // 如果当前在高级设置或检索策略页面但切换到了Agent模式，切换到基础设置
+  if (isAgent && (currentSection.value === 'advanced' || currentSection.value === 'retrieval')) {
     currentSection.value = 'basic';
   }
   if (!isAgent && (currentSection.value === 'skills' || currentSection.value === 'sandbox')) {
@@ -5019,6 +5041,8 @@ const handleSave = async () => {
   }
 
   pruneSelectedSkills()
+
+  if (hostOnly.value) formData.value.config.sandbox_config_id = ''
 
   const payload = { ...formData.value, config: serializeAgentPrompts(formData.value.config, promptTemplates.value) };
   saving.value = true;
