@@ -338,6 +338,16 @@ func (c *Connector) ResolveResourceAncestors(
 type pdsCursor struct {
 	LastSyncTime    time.Time         `json:"last_sync_time"`
 	ListDeltaCursor string            `json:"list_delta_cursor,omitempty"`
+	// Bootstrapped records that a COMPLETE drive walk has been persisted with
+	// this cursor. PDS's get_last_cursor returns an empty string (with no
+	// error) until the drive records its first change event, so an empty
+	// ListDeltaCursor alone cannot distinguish "never bootstrapped" from
+	// "bootstrapped against an empty change feed". Without this flag the
+	// empty-feed case re-bootstrapped — a full delete+recreate re-ingest — on
+	// every scheduled sync forever, because the walk never produced a
+	// non-empty cursor to persist (observed in production: drives whose files
+	// were bulk-imported and never touched re-parsed ~1.5k docs daily).
+	Bootstrapped bool `json:"bootstrapped,omitempty"`
 	DriveFiles      map[string]string `json:"drive_files,omitempty"`
 	// ScopeRoots are the file/folder IDs the sync was scoped to when the
 	// cursor was written (empty = whole drive). A change of scope forces
@@ -374,21 +384,41 @@ func toSyncCursor(p *pdsCursor) *types.SyncCursor {
 }
 
 // needsBootstrap reports whether the sync must start with a full drive
-// walk instead of the delta feed. Four states qualify: no cursor at all
-// (true first run), a cursor without a server delta position, and the
-// "stale handshake" state where an earlier run captured the delta cursor
-// but never observed any files (the delta feed alone would then return
-// nothing forever), and a scope change (the baseline must be rebuilt for
-// the new subtree so out-of-scope files get tombstoned).
+// walk instead of the delta feed. Qualifying states: no cursor at all
+// (true first run), a walk whose file baseline was never persisted (stale
+// handshake), a sync scope change (the baseline must be rebuilt for the
+// new subtree so out-of-scope files get tombstoned), and a legacy or
+// interrupted walk carrying neither a delta cursor nor the Bootstrapped
+// marker — where only a fresh walk can guarantee nothing is missed.
+// An EMPTY delta cursor with the marker set is NOT one of them: PDS
+// returns an empty cursor (no error) for drives whose change feed has no
+// events yet, so marker + empty cursor is a valid incremental state — the
+// delta pass simply starts from the beginning of the (empty) feed.
 func needsBootstrap(prev *pdsCursor, scope syncScope) bool {
-	if prev == nil || prev.ListDeltaCursor == "" || len(prev.DriveFiles) == 0 {
+	if prev == nil {
 		return true
 	}
 	// Scope changed since the cursor was written (e.g. the user picked a
 	// folder after syncing the whole drive): rebuild the baseline for the
 	// new subtree; the walk's deletion diff tombstones everything outside
 	// it.
-	return !scope.matches(prev.ScopeRoots)
+	if !scope.matches(prev.ScopeRoots) {
+		return true
+	}
+	// Walk baseline never persisted (interrupted before any checkpoint, or
+	// the stale-handshake state where a captured delta cursor was never
+	// backed by any observed files).
+	if len(prev.DriveFiles) == 0 {
+		return true
+	}
+	// Legacy cursor (pre-marker) whose delta-cursor capture failed, or a
+	// walk that died mid-way: page checkpoints persist the baseline without
+	// the marker, so absence of both means "never finished a walk with a
+	// usable capture". Re-bootstrap.
+	if !prev.Bootstrapped && prev.ListDeltaCursor == "" {
+		return true
+	}
+	return false
 }
 
 // sink abstracts where fetched items and cursor checkpoints go. The
@@ -515,9 +545,11 @@ func (c *Connector) FetchStream(
 }
 
 // syncFullDrive walks the drive folder tree — the whole drive, or only
-// the picked subtrees when scope is active — emits every supported file,
-// and returns a fresh cursor bootstrapped with the latest server delta
-// position. Because the walk is a COMPLETE listing of the scope, absence
+// the picked subtrees when scope is active — emits every supported file
+// whose updated_at differs from the persisted baseline (unchanged files are
+// re-baselined without being downloaded or re-ingested), and returns a
+// fresh cursor bootstrapped with the latest server delta position. Because
+// the walk is a COMPLETE listing of the scope, absence
 // from it is a reliable deletion signal: files recorded in prev but
 // missing now (including files that fell OUT of the scope) are
 // tombstoned. (Contrast syncDeltaDrive, where absence from a delta page
@@ -592,6 +624,24 @@ func (c *Connector) syncFullDrive(
 			cursor.DriveFiles[f.FileID] = ts
 			continue
 		}
+		// Unchanged since the persisted baseline: skip the download and the
+		// emit entirely. A re-bootstrap (legacy cursor without the marker, a
+		// failed delta-cursor capture, a scope change) would otherwise
+		// re-emit EVERY file, and the ingest path deletes+recreates whatever
+		// it receives — re-running parse/embedding/summary LLM work on
+		// identical content (observed in production: drives whose change
+		// feed is empty re-parsed ~1.5k docs on every scheduled sync).
+		// Deletion detection is unaffected: the file still lands in
+		// `present`, so absence from the listing still tombstones it.
+		// FetchAll passes prev == nil, so an explicit manual full sync keeps
+		// its "re-sync everything" semantics.
+		if prev != nil {
+			if prevTS, tracked := prev.DriveFiles[f.FileID]; tracked && prevTS == ts {
+				present[f.FileID] = ts
+				cursor.DriveFiles[f.FileID] = ts
+				continue
+			}
+		}
 		item, ferr := c.fetchOneFile(ctx, cli, driveID, f, folderPath)
 		if ferr != nil {
 			logger.Warnf(ctx, "[PDS] fetch file %s (drive=%s) failed: %v", f.FileID, driveID, ferr)
@@ -631,6 +681,15 @@ func (c *Connector) syncFullDrive(
 
 	// Record the cursor captured before the walk (see the top of this
 	// function for why capture-before-walk is the safe order).
+	//
+	// Bootstrapped is set only when the capture SUCCEEDED. A successful
+	// capture that returned an empty string is a legitimate state (the
+	// drive's change feed has no events yet — e.g. files were bulk-imported
+	// and never touched): marker + empty cursor lets the next sync run the
+	// delta pass from the feed's beginning instead of re-walking the whole
+	// drive. A FAILED capture leaves the marker off so the next sync
+	// re-bootstraps instead of trusting a half-initialized cursor.
+	cursor.Bootstrapped = cerr == nil
 	if cerr == nil {
 		cursor.ListDeltaCursor = deltaCursor
 	}
@@ -655,6 +714,10 @@ func (c *Connector) syncDeltaDrive(
 	cursor := &pdsCursor{
 		LastSyncTime:    time.Now().UTC(),
 		ListDeltaCursor: prev.ListDeltaCursor,
+		// needsBootstrap only routes here for a cursor that finished a walk
+		// with a usable capture (marker set, or a legacy non-empty delta
+		// cursor). Mark it so the flag backfills onto legacy cursors too.
+		Bootstrapped: true,
 		DriveFiles:      make(map[string]string, len(prev.DriveFiles)),
 		ScopeRoots:      scope.roots,
 	}

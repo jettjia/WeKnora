@@ -953,6 +953,194 @@ func TestFetchIncremental_StaleHandshakeReboots(t *testing.T) {
 	}
 }
 
+// TestFetchIncremental_EmptyFeedNoReBootstrap: a drive whose change feed is
+// empty (PDS get_last_cursor returns "" with no error until the drive
+// records its first event — e.g. files bulk-imported and never touched)
+// must not re-bootstrap on every sync. The first run walks the drive and
+// persists a marker alongside the empty delta cursor; the second run goes
+// straight to the delta pass (which returns nothing) instead of re-walking
+// and re-ingesting every file.
+func TestFetchIncremental_EmptyFeedNoReBootstrap(t *testing.T) {
+	f := newFakePDS(t)
+	// No setLastCursor: the fake returns cursor "" — the empty-feed state.
+	f.setFiles("root",
+		pdsFile{FileID: "f1", Name: "f1.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+	)
+	f.setDownload("f1", []byte("f1 body"), "text/plain")
+
+	c := NewConnector()
+	items, cursor, err := c.FetchIncremental(context.Background(), f.config("d1"), nil)
+	if err != nil {
+		t.Fatalf("first FetchIncremental: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("bootstrap should emit 1 item, got %d (%s)", len(items), describeItems(items))
+	}
+	if got := cursor.ConnectorCursor["bootstrapped"]; got != true {
+		t.Errorf("cursor bootstrapped flag = %v, want true", got)
+	}
+	if got := cursor.ConnectorCursor["list_delta_cursor"]; got != "" && got != nil {
+		t.Errorf("list_delta_cursor = %v, want empty/absent for an empty feed", got)
+	}
+
+	// Second sync with the persisted cursor: delta pass, no re-walk.
+	items2, _, err := c.FetchIncremental(context.Background(), f.config("d1"), cursor)
+	if err != nil {
+		t.Fatalf("second FetchIncremental: %v", err)
+	}
+	if len(items2) != 0 {
+		t.Errorf("empty feed must emit nothing on the delta pass, got %d (%s)",
+			len(items2), describeItems(items2))
+	}
+	if calls := f.callCount("file/list"); calls != 1 {
+		t.Errorf("second sync must not re-walk the drive: file/list called %d times, want 1", calls)
+	}
+	if calls := f.callCount("file/get_download_url"); calls != 1 {
+		t.Errorf("second sync must not re-download files: get_download_url called %d times, want 1", calls)
+	}
+}
+
+// TestFetchIncremental_EmptyFeedDeltaPicksUpChanges: after the empty-feed
+// marker is persisted, a file added to the drive surfaces through the delta
+// pass started from an empty cursor (the feed now has events).
+func TestFetchIncremental_EmptyFeedDeltaPicksUpChanges(t *testing.T) {
+	f := newFakePDS(t)
+	f.setFiles("root",
+		pdsFile{FileID: "f1", Name: "f1.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+	)
+	f.setDownload("f1", []byte("f1 body"), "text/plain")
+
+	c := NewConnector()
+	_, cursor, err := c.FetchIncremental(context.Background(), f.config("d1"), nil)
+	if err != nil {
+		t.Fatalf("bootstrap FetchIncremental: %v", err)
+	}
+
+	// A file is later uploaded; the feed records it after the empty cursor.
+	f.setFiles("root",
+		pdsFile{FileID: "f1", Name: "f1.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+		pdsFile{FileID: "f2", Name: "f2.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+	)
+	f.setDownload("f2", []byte("f2 body"), "text/plain")
+	f.setDelta("", []pdsDeltaItem{
+		{File: pdsFile{FileID: "f2", Name: "f2.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()}, Op: "create"},
+	}, false)
+
+	items, _, err := c.FetchIncremental(context.Background(), f.config("d1"), cursor)
+	if err != nil {
+		t.Fatalf("delta FetchIncremental: %v", err)
+	}
+	if _, ok := findItem(items, pdsFileExternalID("d1", "f2")); !ok {
+		t.Errorf("expected the new file via the delta pass, got %s", describeItems(items))
+	}
+	if calls := f.callCount("file/list"); calls != 1 {
+		t.Errorf("delta pass must not re-walk: file/list called %d times, want 1", calls)
+	}
+}
+
+// TestFetchIncremental_CaptureFailureStillRebootstraps: when the pre-walk
+// delta cursor capture FAILS (the empty-feed marker must not be trusted in
+// that state), the cursor is persisted without the marker so the next sync
+// re-bootstraps rather than risking a silent miss. The re-bootstrap walk is
+// nevertheless cheap: files whose updated_at matches the persisted baseline
+// are re-baselined without being downloaded or re-ingested.
+func TestFetchIncremental_CaptureFailureStillRebootstraps(t *testing.T) {
+	f := newFakePDS(t)
+	f.setFiles("root",
+		pdsFile{FileID: "f1", Name: "f1.txt", Type: "file", ParentID: "root", UpdatedAt: time.Now()},
+	)
+	f.setDownload("f1", []byte("f1 body"), "text/plain")
+	// The first get_last_cursor call fails with 401 (no refresh token on
+	// this config, so it is terminal for that call only).
+	f.forceUnauthorized()
+
+	c := NewConnector()
+	items, cursor, err := c.FetchIncremental(context.Background(), f.config("d1"), nil)
+	if err != nil {
+		t.Fatalf("FetchIncremental with failed capture: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("walk should still emit 1 item, got %d (%s)", len(items), describeItems(items))
+	}
+	if got := cursor.ConnectorCursor["bootstrapped"]; got == true {
+		t.Error("bootstrapped must stay false when the delta cursor capture failed")
+	}
+
+	// Next sync re-bootstraps (the walk runs again) but re-emits nothing:
+	// f1's updated_at matches the persisted baseline.
+	items2, _, err := c.FetchIncremental(context.Background(), f.config("d1"), cursor)
+	if err != nil {
+		t.Fatalf("second FetchIncremental: %v", err)
+	}
+	if len(items2) != 0 {
+		t.Errorf("unchanged files must be re-baselined without re-ingest, got %d (%s)",
+			len(items2), describeItems(items2))
+	}
+	if calls := f.callCount("file/list"); calls != 2 {
+		t.Errorf("expected a re-bootstrap walk: file/list called %d times, want 2", calls)
+	}
+	if calls := f.callCount("file/get_download_url"); calls != 1 {
+		t.Errorf("unchanged file must not be re-downloaded: get_download_url called %d times, want 1", calls)
+	}
+}
+
+// TestFetchIncremental_ReBootstrapSkipsUnchanged: a re-bootstrap walk
+// (here triggered by a legacy cursor carrying only the file baseline —
+// exactly the state production cursors have before the marker existed)
+// emits only files whose updated_at changed since the baseline — new files
+// are emitted, touched files are re-emitted with fresh content, untouched
+// files are skipped (no download), and files removed from the drive are
+// still tombstoned by the deletion diff.
+func TestFetchIncremental_ReBootstrapSkipsUnchanged(t *testing.T) {
+	oldTS := time.Now().Add(-24 * time.Hour)
+	nowTS := time.Now()
+	f := newFakePDS(t)
+	// The wire field is updated_at (UpdatedAtRaw); UpdatedAt is derived from
+	// it by the connector's best-effort parse.
+	f.setFiles("root",
+		pdsFile{FileID: "same", Name: "same.txt", Type: "file", ParentID: "root", UpdatedAtRaw: oldTS.Format(time.RFC3339)},
+		pdsFile{FileID: "touched", Name: "touched.txt", Type: "file", ParentID: "root", UpdatedAtRaw: nowTS.Format(time.RFC3339)},
+		pdsFile{FileID: "new", Name: "new.txt", Type: "file", ParentID: "root", UpdatedAtRaw: nowTS.Format(time.RFC3339)},
+	)
+	f.setDownload("same", []byte("same body"), "text/plain")
+	f.setDownload("touched", []byte("touched body v2"), "text/plain")
+	f.setDownload("new", []byte("new body"), "text/plain")
+
+	c := NewConnector()
+	prev := &types.SyncCursor{
+		ConnectorCursor: map[string]interface{}{
+			// Legacy baseline: fileID -> updated_at, no marker, no delta
+			// cursor — forces a re-bootstrap walk.
+			"drive_files": map[string]string{
+				"same":    oldTS.Format(time.RFC3339),
+				"touched": oldTS.Format(time.RFC3339),
+				"gone":    oldTS.Format(time.RFC3339),
+			},
+		},
+	}
+
+	items, _, err := c.FetchIncremental(context.Background(), f.config("d1"), prev)
+	if err != nil {
+		t.Fatalf("FetchIncremental: %v", err)
+	}
+	if _, ok := findItem(items, pdsFileExternalID("d1", "same")); ok {
+		t.Errorf("unchanged same.txt must be skipped, got %s", describeItems(items))
+	}
+	if it, ok := findItem(items, pdsFileExternalID("d1", "touched")); !ok || string(it.Content) != "touched body v2" {
+		t.Errorf("touched.txt must be re-emitted with fresh content, got %s", describeItems(items))
+	}
+	if _, ok := findItem(items, pdsFileExternalID("d1", "new")); !ok {
+		t.Errorf("new.txt must be emitted, got %s", describeItems(items))
+	}
+	tomb, ok := findItem(items, pdsFileExternalID("d1", "gone"))
+	if !ok || !tomb.IsDeleted {
+		t.Errorf("removed file must still be tombstoned, got %s", describeItems(items))
+	}
+	if calls := f.callCount("file/get_download_url"); calls != 2 {
+		t.Errorf("only changed/new files may be downloaded: get_download_url called %d times, want 2", calls)
+	}
+}
+
 // testStreamHandler is a scriptable datasource.StreamHandler.
 type testStreamHandler struct {
 	emitFn       func(ctx context.Context, item types.FetchedItem) error
